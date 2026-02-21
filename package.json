@@ -1,0 +1,26 @@
+{
+  "name": "arcane-mcp-server",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev",
+    "start": "wrangler dev",
+    "cf-typegen": "wrangler types",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "agents": "^0.5.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "*",
+    "@cloudflare/workers-types": "*",
+    "@types/node": "*",
+    "typescript": "5.9.3",
+    "vitest": "*",
+    "wrangler": "^4.67.0"
+  }
+}
