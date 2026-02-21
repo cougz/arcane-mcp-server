@@ -144,6 +144,71 @@ bunx @modelcontextprotocol/inspector@latest
 
 Replace `<account>` with your Cloudflare account identifier.
 
+## Connecting OpenCode
+
+To use this MCP server with [OpenCode](https://opencode.ai), configure it in your OpenCode settings:
+
+1. Open OpenCode Settings → MCP Servers
+2. Add a new MCP server with the following configuration:
+
+```json
+{
+  "name": "Arcane",
+  "url": "https://arcane-mcp-server.<account>.workers.dev/mcp",
+  "transport": "sse"
+}
+```
+
+Replace `<account>` with your Cloudflare account identifier.
+
+### OpenCode Usage Examples
+
+Once connected, you can interact with your Arcane Docker infrastructure through natural language conversations in OpenCode:
+
+**Example 1: List environments**
+```
+User: Show me all my Docker environments
+OpenCode: [Calls arcane_environment_list]
+Here are your Docker environments:
+- production (connected)
+- staging (connected)
+- dev (connected)
+```
+
+**Example 2: Deploy a stack using a template**
+```
+User: Deploy a WordPress stack to my production environment
+OpenCode: [Calls arcane_template_list, then arcane_stack_deploy]
+Deploying WordPress to production...
+Stack 'wordpress' deployed successfully in environment 'production'
+```
+
+**Example 3: Start/stop containers**
+```
+User: Stop the database container in staging
+OpenCode: [Calls arcane_environment_list, arcane_container_list, then arcane_container_stop]
+Container 'db' stopped successfully in environment 'staging'
+```
+
+**Example 4: Pull and prune images**
+```
+User: Pull the latest nginx image and clean up unused images
+OpenCode: [Calls arcane_image_pull, then arcane_image_prune]
+Pulled nginx:latest...
+Pruned 3 unused images, reclaimed 1.2GB
+```
+
+**Example 5: Inspect a volume**
+```
+User: Show me details of the data volume
+OpenCode: [Calls arcane_volume_inspect]
+Volume 'data' details:
+- Driver: local
+- Mountpoint: /var/lib/docker/volumes/data
+- Created: 2024-01-15T10:30:00Z
+- Size: 5.2GB
+```
+
 ## Secrets Setup
 
 Secrets are managed through the Cloudflare Dashboard:
