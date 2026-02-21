@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { ArcaneApiError } from "../arcane-client";
-import type { ArcaneClient } from "../arcane-client";
+import type { ArcaneClient, ListOptions } from "../arcane-client";
 import { registerEnvironmentTools } from "../tools/environments";
 import { registerStackTools } from "../tools/stacks";
 import { registerContainerTools } from "../tools/containers";
@@ -11,62 +11,105 @@ import { registerNetworkTools } from "../tools/networks";
 import { registerTemplateTools } from "../tools/templates";
 import { registerSystemTools } from "../tools/system";
 
+type MockedFunction<T extends (...args: any[]) => any> = {
+  (...args: Parameters<T>): ReturnType<T>;
+  mockResolvedValue: (value: ReturnType<T>) => MockedFunction<T>;
+  mockRejectedValue: (error: any) => MockedFunction<T>;
+};
+
 describe("MCP Tools", () => {
   const createMockClient = () => {
     const mockClient = {
       environments: {
-        list: vi.fn(),
-        get: vi.fn(),
+        list: vi.fn().mockResolvedValue({
+          success: true,
+          data: [],
+          pagination: { totalItems: 0, totalPages: 1, currentPage: 1, itemsPerPage: 50 },
+        }) as MockedFunction<(opts?: ListOptions) => any>,
+        get: vi.fn().mockResolvedValue({
+          success: true,
+          data: { id: "env1", name: "production", apiUrl: "http://localhost", status: "connected", enabled: true, isEdge: false },
+        }) as MockedFunction<(id: string) => any>,
         create: vi.fn(),
         update: vi.fn(),
         delete: vi.fn(),
       },
       stacks: {
-        list: vi.fn(),
-        get: vi.fn(),
+        list: vi.fn().mockResolvedValue({
+          success: true,
+          data: [],
+          pagination: { totalItems: 0, totalPages: 1, currentPage: 1, itemsPerPage: 50 },
+        }) as MockedFunction<(envId: string, opts?: ListOptions) => any>,
+        get: vi.fn().mockResolvedValue({
+          success: true,
+          data: { id: "stack1", name: "myapp", path: "/myapp", status: "running", serviceCount: 2, runningCount: 2, createdAt: "2024-01-01", updatedAt: "2024-01-01" },
+        }) as MockedFunction<(envId: string, stackId: string) => any>,
         deploy: vi.fn(),
         update: vi.fn(),
         delete: vi.fn(),
-        start: vi.fn(),
+        start: vi.fn().mockResolvedValue({ success: true, message: "Started" }) as MockedFunction<(envId: string, stackId: string) => any>,
         stop: vi.fn(),
         restart: vi.fn(),
         pull: vi.fn(),
       },
       containers: {
-        list: vi.fn(),
+        list: vi.fn().mockResolvedValue({
+          success: true,
+          data: [],
+          pagination: { totalItems: 0, totalPages: 1, currentPage: 1, itemsPerPage: 50 },
+        }) as MockedFunction<(envId: string) => any>,
         get: vi.fn(),
-        start: vi.fn(),
+        start: vi.fn().mockResolvedValue({ success: true, message: "Started" }) as MockedFunction<(envId: string, containerId: string) => any>,
         stop: vi.fn(),
         restart: vi.fn(),
         kill: vi.fn(),
       },
       images: {
-        list: vi.fn(),
+        list: vi.fn().mockResolvedValue({
+          success: true,
+          data: [],
+          pagination: { totalItems: 0, totalPages: 1, currentPage: 1, itemsPerPage: 50 },
+        }) as MockedFunction<(envId: string) => any>,
         pull: vi.fn(),
         remove: vi.fn(),
         prune: vi.fn(),
       },
       volumes: {
-        list: vi.fn(),
+        list: vi.fn().mockResolvedValue({
+          success: true,
+          data: [],
+          pagination: { totalItems: 0, totalPages: 1, currentPage: 1, itemsPerPage: 50 },
+        }) as MockedFunction<(envId: string) => any>,
         inspect: vi.fn(),
         remove: vi.fn(),
         prune: vi.fn(),
       },
       networks: {
-        list: vi.fn(),
+        list: vi.fn().mockResolvedValue({
+          success: true,
+          data: [],
+          pagination: { totalItems: 0, totalPages: 1, currentPage: 1, itemsPerPage: 50 },
+        }) as MockedFunction<(envId: string) => any>,
         inspect: vi.fn(),
         remove: vi.fn(),
         prune: vi.fn(),
       },
       templates: {
-        list: vi.fn(),
+        list: vi.fn().mockResolvedValue({
+          success: true,
+          data: [],
+          pagination: { totalItems: 0, totalPages: 1, currentPage: 1, itemsPerPage: 50 },
+        }) as MockedFunction<(opts?: ListOptions) => any>,
         get: vi.fn(),
         create: vi.fn(),
         update: vi.fn(),
         delete: vi.fn(),
       },
       system: {
-        version: vi.fn(),
+        version: vi.fn().mockResolvedValue({
+          success: true,
+          data: { version: "1.2.3" },
+        }) as MockedFunction<() => any>,
       },
     } as unknown as ArcaneClient;
     return mockClient;
@@ -101,7 +144,7 @@ describe("MCP Tools", () => {
 
     it("arcane_environment_list calls client.environments.list with correct params", async () => {
       const mockClient = createMockClient();
-      mockClient.environments.list.mockResolvedValue({
+      (mockClient.environments.list as any).mockResolvedValue({
         success: true,
         data: [{ id: "env1", name: "production", apiUrl: "http://localhost", status: "connected", enabled: true, isEdge: false }],
         pagination: { totalItems: 1, totalPages: 1, currentPage: 1, itemsPerPage: 50 },
@@ -119,7 +162,7 @@ describe("MCP Tools", () => {
 
     it("arcane_environment_get with environmentId calls client.environments.get", async () => {
       const mockClient = createMockClient();
-      mockClient.environments.get.mockResolvedValue({
+      (mockClient.environments.get as any).mockResolvedValue({
         success: true,
         data: { id: "env1", name: "production", apiUrl: "http://localhost", status: "connected", enabled: true, isEdge: false },
       });
@@ -136,12 +179,12 @@ describe("MCP Tools", () => {
 
     it("arcane_environment_get with environmentName uses resolver", async () => {
       const mockClient = createMockClient();
-      mockClient.environments.list.mockResolvedValue({
+      (mockClient.environments.list as any).mockResolvedValue({
         success: true,
         data: [{ id: "env1", name: "production", apiUrl: "http://localhost", status: "connected", enabled: true, isEdge: false }],
         pagination: { totalItems: 1, totalPages: 1, currentPage: 1, itemsPerPage: 50 },
       });
-      mockClient.environments.get.mockResolvedValue({
+      (mockClient.environments.get as any).mockResolvedValue({
         success: true,
         data: { id: "env1", name: "production", apiUrl: "http://localhost", status: "connected", enabled: true, isEdge: false },
       });
@@ -158,7 +201,7 @@ describe("MCP Tools", () => {
 
     it("returns isError: true on ArcaneApiError", async () => {
       const mockClient = createMockClient();
-      mockClient.environments.list.mockRejectedValue(new ArcaneApiError(404, "Not found"));
+      (mockClient.environments.list as any).mockRejectedValue(new ArcaneApiError(404, "Not found"));
 
       const server = createMockServer();
       registerEnvironmentTools(server as any, mockClient);
@@ -189,7 +232,7 @@ describe("MCP Tools", () => {
 
     it("arcane_stack_list calls client.stacks.list with correct params", async () => {
       const mockClient = createMockClient();
-      mockClient.stacks.list.mockResolvedValue({
+      (mockClient.stacks.list as any).mockResolvedValue({
         success: true,
         data: [{ id: "stack1", name: "myapp", path: "/myapp", status: "running", serviceCount: 2, runningCount: 2, createdAt: "2024-01-01", updatedAt: "2024-01-01" }],
         pagination: { totalItems: 1, totalPages: 1, currentPage: 1, itemsPerPage: 50 },
@@ -207,12 +250,12 @@ describe("MCP Tools", () => {
 
     it("arcane_stack_start returns human-readable message", async () => {
       const mockClient = createMockClient();
-      mockClient.stacks.list.mockResolvedValue({
+      (mockClient.stacks.list as any).mockResolvedValue({
         success: true,
         data: [{ id: "stack1", name: "myapp", path: "/myapp", status: "running", serviceCount: 2, runningCount: 2, createdAt: "2024-01-01", updatedAt: "2024-01-01" }],
         pagination: { totalItems: 1, totalPages: 1, currentPage: 1, itemsPerPage: 50 },
       });
-      mockClient.stacks.start.mockResolvedValue({ success: true, message: "Started" });
+      (mockClient.stacks.start as any).mockResolvedValue({ success: true, message: "Started" });
 
       const server = createMockServer();
       registerStackTools(server as any, mockClient);
@@ -242,7 +285,7 @@ describe("MCP Tools", () => {
 
     it("arcane_container_list calls client.containers.list", async () => {
       const mockClient = createMockClient();
-      mockClient.containers.list.mockResolvedValue({
+      (mockClient.containers.list as any).mockResolvedValue({
         success: true,
         data: [],
         pagination: { totalItems: 0, totalPages: 1, currentPage: 1, itemsPerPage: 50 },
@@ -260,7 +303,7 @@ describe("MCP Tools", () => {
 
     it("arcane_container_start returns human-readable message", async () => {
       const mockClient = createMockClient();
-      mockClient.containers.list.mockResolvedValue({
+      (mockClient.containers.list as any).mockResolvedValue({
         success: true,
         data: [
           {
@@ -279,7 +322,7 @@ describe("MCP Tools", () => {
         ],
         pagination: { totalItems: 1, totalPages: 1, currentPage: 1, itemsPerPage: 50 },
       });
-      mockClient.containers.start.mockResolvedValue({ success: true, message: "Started" });
+      (mockClient.containers.start as any).mockResolvedValue({ success: true, message: "Started" });
 
       const server = createMockServer();
       registerContainerTools(server as any, mockClient);
@@ -304,7 +347,7 @@ describe("MCP Tools", () => {
 
     it("arcane_image_list calls client.images.list", async () => {
       const mockClient = createMockClient();
-      mockClient.images.list.mockResolvedValue({
+      (mockClient.images.list as any).mockResolvedValue({
         success: true,
         data: [],
         pagination: { totalItems: 0, totalPages: 1, currentPage: 1, itemsPerPage: 50 },
@@ -334,7 +377,7 @@ describe("MCP Tools", () => {
 
     it("arcane_volume_list calls client.volumes.list", async () => {
       const mockClient = createMockClient();
-      mockClient.volumes.list.mockResolvedValue({
+      (mockClient.volumes.list as any).mockResolvedValue({
         success: true,
         data: [],
         pagination: { totalItems: 0, totalPages: 1, currentPage: 1, itemsPerPage: 50 },
@@ -364,7 +407,7 @@ describe("MCP Tools", () => {
 
     it("arcane_network_list calls client.networks.list", async () => {
       const mockClient = createMockClient();
-      mockClient.networks.list.mockResolvedValue({
+      (mockClient.networks.list as any).mockResolvedValue({
         success: true,
         data: [],
         pagination: { totalItems: 0, totalPages: 1, currentPage: 1, itemsPerPage: 50 },
@@ -394,7 +437,7 @@ describe("MCP Tools", () => {
 
     it("arcane_template_list calls client.templates.list", async () => {
       const mockClient = createMockClient();
-      mockClient.templates.list.mockResolvedValue({
+      (mockClient.templates.list as any).mockResolvedValue({
         success: true,
         data: [],
         pagination: { totalItems: 0, totalPages: 1, currentPage: 1, itemsPerPage: 50 },
@@ -424,7 +467,7 @@ describe("MCP Tools", () => {
 
     it("arcane_version calls client.system.version", async () => {
       const mockClient = createMockClient();
-      mockClient.system.version.mockResolvedValue({
+      (mockClient.system.version as any).mockResolvedValue({
         success: true,
         data: { version: "1.2.3" },
       });

@@ -56,7 +56,7 @@ describe("ArcaneClient", () => {
         json: async () => ({ success: true, data: null, message: "created" }),
       } as Response);
 
-      await client.environments.create({ name: "test", host: "localhost", port: 2375 });
+      await client.environments.create({ name: "test", apiUrl: "http://localhost:2375" });
 
       expect(mockFetch).toHaveBeenCalledWith(
         expect.any(String),
@@ -138,7 +138,7 @@ describe("ArcaneClient", () => {
         json: async () => ({ success: true, data: { id: "123", name: "test" } }),
       } as Response);
 
-      const dto = { name: "test", host: "localhost", port: 2375 };
+      const dto = { name: "test", apiUrl: "http://localhost:2375" };
       await client.environments.create(dto);
 
       expect(mockFetch).toHaveBeenCalledWith(
