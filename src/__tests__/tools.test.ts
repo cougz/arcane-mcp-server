@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { ArcaneClient, ArcaneApiError } from "../arcane-client";
+import { ArcaneApiError } from "../arcane-client";
+import type { ArcaneClient } from "../arcane-client";
 import { registerEnvironmentTools } from "../tools/environments";
 import { registerStackTools } from "../tools/stacks";
 import { registerContainerTools } from "../tools/containers";
@@ -71,28 +72,31 @@ describe("MCP Tools", () => {
     return mockClient;
   };
 
-  const createServer = () => {
-    const server = new McpServer({
-      name: "Test Server",
-      version: "1.0.0",
-    });
-    return server;
+  const createMockServer = () => {
+    const toolHandlers = new Map<string, any>();
+    return {
+      tool: vi.fn((name: string, description: string, schema: any, handler: any) => {
+        toolHandlers.set(name, handler);
+      }),
+      getHandler: (name: string) => toolHandlers.get(name),
+      toolHandlers,
+    };
   };
 
   describe("environment tools", () => {
     it("registers arcane_environment_list tool", () => {
       const mockClient = createMockClient();
-      const server = createServer();
-      const listSpy = vi.spyOn(server, "tool");
+      const server = createMockServer();
 
-      registerEnvironmentTools(server, mockClient);
+      registerEnvironmentTools(server as any, mockClient);
 
-      expect(listSpy).toHaveBeenCalledWith(
+      expect(server.tool).toHaveBeenCalledWith(
         "arcane_environment_list",
         expect.any(String),
         expect.any(Object),
         expect.any(Function)
       );
+      expect(server.getHandler("arcane_environment_list")).toBeDefined();
     });
 
     it("arcane_environment_list calls client.environments.list with correct params", async () => {
@@ -103,11 +107,11 @@ describe("MCP Tools", () => {
         pagination: { totalItems: 1, totalPages: 1, currentPage: 1, itemsPerPage: 50 },
       });
 
-      const server = createServer();
-      registerEnvironmentTools(server, mockClient);
+      const server = createMockServer();
+      registerEnvironmentTools(server as any, mockClient);
 
-      const toolHandler = (server as any).tools.get("arcane_environment_list");
-      const result = await toolHandler.handler({ search: "prod", limit: 10 });
+      const handler = server.getHandler("arcane_environment_list");
+      const result = await handler({ search: "prod", limit: 10 });
 
       expect(mockClient.environments.list).toHaveBeenCalledWith({ search: "prod", limit: 10 });
       expect(result.content).toEqual([{ type: "text", text: expect.any(String) }]);
@@ -120,11 +124,11 @@ describe("MCP Tools", () => {
         data: { id: "env1", name: "production", apiUrl: "http://localhost", status: "connected", enabled: true, isEdge: false },
       });
 
-      const server = createServer();
-      registerEnvironmentTools(server, mockClient);
+      const server = createMockServer();
+      registerEnvironmentTools(server as any, mockClient);
 
-      const toolHandler = (server as any).tools.get("arcane_environment_get");
-      const result = await toolHandler.handler({ environmentId: "env1" });
+      const handler = server.getHandler("arcane_environment_get");
+      const result = await handler({ environmentId: "env1" });
 
       expect(mockClient.environments.get).toHaveBeenCalledWith("env1");
       expect(result.content).toEqual([{ type: "text", text: expect.any(String) }]);
@@ -142,11 +146,11 @@ describe("MCP Tools", () => {
         data: { id: "env1", name: "production", apiUrl: "http://localhost", status: "connected", enabled: true, isEdge: false },
       });
 
-      const server = createServer();
-      registerEnvironmentTools(server, mockClient);
+      const server = createMockServer();
+      registerEnvironmentTools(server as any, mockClient);
 
-      const toolHandler = (server as any).tools.get("arcane_environment_get");
-      await toolHandler.handler({ environmentName: "production" });
+      const handler = server.getHandler("arcane_environment_get");
+      await handler({ environmentName: "production" });
 
       expect(mockClient.environments.list).toHaveBeenCalledWith({ search: "production", limit: 50 });
       expect(mockClient.environments.get).toHaveBeenCalledWith("env1");
@@ -156,11 +160,11 @@ describe("MCP Tools", () => {
       const mockClient = createMockClient();
       mockClient.environments.list.mockRejectedValue(new ArcaneApiError(404, "Not found"));
 
-      const server = createServer();
-      registerEnvironmentTools(server, mockClient);
+      const server = createMockServer();
+      registerEnvironmentTools(server as any, mockClient);
 
-      const toolHandler = (server as any).tools.get("arcane_environment_list");
-      const result = await toolHandler.handler({});
+      const handler = server.getHandler("arcane_environment_list");
+      const result = await handler({});
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toMatch(/^Error:/);
@@ -170,17 +174,17 @@ describe("MCP Tools", () => {
   describe("stack tools", () => {
     it("registers arcane_stack_list tool", () => {
       const mockClient = createMockClient();
-      const server = createServer();
-      const listSpy = vi.spyOn(server, "tool");
+      const server = createMockServer();
 
-      registerStackTools(server, mockClient);
+      registerStackTools(server as any, mockClient);
 
-      expect(listSpy).toHaveBeenCalledWith(
+      expect(server.tool).toHaveBeenCalledWith(
         "arcane_stack_list",
         expect.any(String),
         expect.any(Object),
         expect.any(Function)
       );
+      expect(server.getHandler("arcane_stack_list")).toBeDefined();
     });
 
     it("arcane_stack_list calls client.stacks.list with correct params", async () => {
@@ -191,11 +195,11 @@ describe("MCP Tools", () => {
         pagination: { totalItems: 1, totalPages: 1, currentPage: 1, itemsPerPage: 50 },
       });
 
-      const server = createServer();
-      registerStackTools(server, mockClient);
+      const server = createMockServer();
+      registerStackTools(server as any, mockClient);
 
-      const toolHandler = (server as any).tools.get("arcane_stack_list");
-      const result = await toolHandler.handler({ environmentId: "env1", search: "myapp" });
+      const handler = server.getHandler("arcane_stack_list");
+      const result = await handler({ environmentId: "env1", search: "myapp" });
 
       expect(mockClient.stacks.list).toHaveBeenCalledWith("env1", { search: "myapp", limit: 50 });
       expect(result.content).toEqual([{ type: "text", text: expect.any(String) }]);
@@ -210,11 +214,11 @@ describe("MCP Tools", () => {
       });
       mockClient.stacks.start.mockResolvedValue({ success: true, message: "Started" });
 
-      const server = createServer();
-      registerStackTools(server, mockClient);
+      const server = createMockServer();
+      registerStackTools(server as any, mockClient);
 
-      const toolHandler = (server as any).tools.get("arcane_stack_start");
-      const result = await toolHandler.handler({ environmentId: "env1", stackName: "myapp" });
+      const handler = server.getHandler("arcane_stack_start");
+      const result = await handler({ environmentId: "env1", stackName: "myapp" });
 
       expect(result.content[0].text).toBe("Stack 'myapp' started successfully in environment 'env1'");
     });
@@ -223,17 +227,17 @@ describe("MCP Tools", () => {
   describe("container tools", () => {
     it("registers arcane_container_list tool", () => {
       const mockClient = createMockClient();
-      const server = createServer();
-      const listSpy = vi.spyOn(server, "tool");
+      const server = createMockServer();
 
-      registerContainerTools(server, mockClient);
+      registerContainerTools(server as any, mockClient);
 
-      expect(listSpy).toHaveBeenCalledWith(
+      expect(server.tool).toHaveBeenCalledWith(
         "arcane_container_list",
         expect.any(String),
         expect.any(Object),
         expect.any(Function)
       );
+      expect(server.getHandler("arcane_container_list")).toBeDefined();
     });
 
     it("arcane_container_list calls client.containers.list", async () => {
@@ -244,11 +248,11 @@ describe("MCP Tools", () => {
         pagination: { totalItems: 0, totalPages: 1, currentPage: 1, itemsPerPage: 50 },
       });
 
-      const server = createServer();
-      registerContainerTools(server, mockClient);
+      const server = createMockServer();
+      registerContainerTools(server as any, mockClient);
 
-      const toolHandler = (server as any).tools.get("arcane_container_list");
-      const result = await toolHandler.handler({ environmentId: "env1" });
+      const handler = server.getHandler("arcane_container_list");
+      const result = await handler({ environmentId: "env1" });
 
       expect(mockClient.containers.list).toHaveBeenCalledWith("env1");
       expect(result.content).toEqual([{ type: "text", text: expect.any(String) }]);
@@ -277,11 +281,11 @@ describe("MCP Tools", () => {
       });
       mockClient.containers.start.mockResolvedValue({ success: true, message: "Started" });
 
-      const server = createServer();
-      registerContainerTools(server, mockClient);
+      const server = createMockServer();
+      registerContainerTools(server as any, mockClient);
 
-      const toolHandler = (server as any).tools.get("arcane_container_start");
-      const result = await toolHandler.handler({ environmentId: "env1", containerName: "web" });
+      const handler = server.getHandler("arcane_container_start");
+      const result = await handler({ environmentId: "env1", containerName: "web" });
 
       expect(result.content[0].text).toBe("Container 'web' started successfully in environment 'env1'");
     });
@@ -290,12 +294,12 @@ describe("MCP Tools", () => {
   describe("image tools", () => {
     it("registers arcane_image_list tool", () => {
       const mockClient = createMockClient();
-      const server = createServer();
-      const listSpy = vi.spyOn(server, "tool");
+      const server = createMockServer();
 
-      registerImageTools(server, mockClient);
+      registerImageTools(server as any, mockClient);
 
-      expect(listSpy).toHaveBeenCalledWith("arcane_image_list", expect.any(String), expect.any(Object), expect.any(Function));
+      expect(server.tool).toHaveBeenCalledWith("arcane_image_list", expect.any(String), expect.any(Object), expect.any(Function));
+      expect(server.getHandler("arcane_image_list")).toBeDefined();
     });
 
     it("arcane_image_list calls client.images.list", async () => {
@@ -306,11 +310,11 @@ describe("MCP Tools", () => {
         pagination: { totalItems: 0, totalPages: 1, currentPage: 1, itemsPerPage: 50 },
       });
 
-      const server = createServer();
-      registerImageTools(server, mockClient);
+      const server = createMockServer();
+      registerImageTools(server as any, mockClient);
 
-      const toolHandler = (server as any).tools.get("arcane_image_list");
-      const result = await toolHandler.handler({ environmentId: "env1" });
+      const handler = server.getHandler("arcane_image_list");
+      const result = await handler({ environmentId: "env1" });
 
       expect(mockClient.images.list).toHaveBeenCalledWith("env1");
       expect(result.content).toEqual([{ type: "text", text: expect.any(String) }]);
@@ -320,12 +324,12 @@ describe("MCP Tools", () => {
   describe("volume tools", () => {
     it("registers arcane_volume_list tool", () => {
       const mockClient = createMockClient();
-      const server = createServer();
-      const listSpy = vi.spyOn(server, "tool");
+      const server = createMockServer();
 
-      registerVolumeTools(server, mockClient);
+      registerVolumeTools(server as any, mockClient);
 
-      expect(listSpy).toHaveBeenCalledWith("arcane_volume_list", expect.any(String), expect.any(Object), expect.any(Function));
+      expect(server.tool).toHaveBeenCalledWith("arcane_volume_list", expect.any(String), expect.any(Object), expect.any(Function));
+      expect(server.getHandler("arcane_volume_list")).toBeDefined();
     });
 
     it("arcane_volume_list calls client.volumes.list", async () => {
@@ -336,11 +340,11 @@ describe("MCP Tools", () => {
         pagination: { totalItems: 0, totalPages: 1, currentPage: 1, itemsPerPage: 50 },
       });
 
-      const server = createServer();
-      registerVolumeTools(server, mockClient);
+      const server = createMockServer();
+      registerVolumeTools(server as any, mockClient);
 
-      const toolHandler = (server as any).tools.get("arcane_volume_list");
-      const result = await toolHandler.handler({ environmentId: "env1" });
+      const handler = server.getHandler("arcane_volume_list");
+      const result = await handler({ environmentId: "env1" });
 
       expect(mockClient.volumes.list).toHaveBeenCalledWith("env1");
       expect(result.content).toEqual([{ type: "text", text: expect.any(String) }]);
@@ -350,12 +354,12 @@ describe("MCP Tools", () => {
   describe("network tools", () => {
     it("registers arcane_network_list tool", () => {
       const mockClient = createMockClient();
-      const server = createServer();
-      const listSpy = vi.spyOn(server, "tool");
+      const server = createMockServer();
 
-      registerNetworkTools(server, mockClient);
+      registerNetworkTools(server as any, mockClient);
 
-      expect(listSpy).toHaveBeenCalledWith("arcane_network_list", expect.any(String), expect.any(Object), expect.any(Function));
+      expect(server.tool).toHaveBeenCalledWith("arcane_network_list", expect.any(String), expect.any(Object), expect.any(Function));
+      expect(server.getHandler("arcane_network_list")).toBeDefined();
     });
 
     it("arcane_network_list calls client.networks.list", async () => {
@@ -366,11 +370,11 @@ describe("MCP Tools", () => {
         pagination: { totalItems: 0, totalPages: 1, currentPage: 1, itemsPerPage: 50 },
       });
 
-      const server = createServer();
-      registerNetworkTools(server, mockClient);
+      const server = createMockServer();
+      registerNetworkTools(server as any, mockClient);
 
-      const toolHandler = (server as any).tools.get("arcane_network_list");
-      const result = await toolHandler.handler({ environmentId: "env1" });
+      const handler = server.getHandler("arcane_network_list");
+      const result = await handler({ environmentId: "env1" });
 
       expect(mockClient.networks.list).toHaveBeenCalledWith("env1");
       expect(result.content).toEqual([{ type: "text", text: expect.any(String) }]);
@@ -380,12 +384,12 @@ describe("MCP Tools", () => {
   describe("template tools", () => {
     it("registers arcane_template_list tool", () => {
       const mockClient = createMockClient();
-      const server = createServer();
-      const listSpy = vi.spyOn(server, "tool");
+      const server = createMockServer();
 
-      registerTemplateTools(server, mockClient);
+      registerTemplateTools(server as any, mockClient);
 
-      expect(listSpy).toHaveBeenCalledWith("arcane_template_list", expect.any(String), expect.any(Object), expect.any(Function));
+      expect(server.tool).toHaveBeenCalledWith("arcane_template_list", expect.any(String), expect.any(Object), expect.any(Function));
+      expect(server.getHandler("arcane_template_list")).toBeDefined();
     });
 
     it("arcane_template_list calls client.templates.list", async () => {
@@ -396,11 +400,11 @@ describe("MCP Tools", () => {
         pagination: { totalItems: 0, totalPages: 1, currentPage: 1, itemsPerPage: 50 },
       });
 
-      const server = createServer();
-      registerTemplateTools(server, mockClient);
+      const server = createMockServer();
+      registerTemplateTools(server as any, mockClient);
 
-      const toolHandler = (server as any).tools.get("arcane_template_list");
-      const result = await toolHandler.handler({ search: "wordpress" });
+      const handler = server.getHandler("arcane_template_list");
+      const result = await handler({ search: "wordpress" });
 
       expect(mockClient.templates.list).toHaveBeenCalledWith({ search: "wordpress", limit: 50 });
       expect(result.content).toEqual([{ type: "text", text: expect.any(String) }]);
@@ -410,12 +414,12 @@ describe("MCP Tools", () => {
   describe("system tools", () => {
     it("registers arcane_version tool", () => {
       const mockClient = createMockClient();
-      const server = createServer();
-      const listSpy = vi.spyOn(server, "tool");
+      const server = createMockServer();
 
-      registerSystemTools(server, mockClient);
+      registerSystemTools(server as any, mockClient);
 
-      expect(listSpy).toHaveBeenCalledWith("arcane_version", expect.any(String), expect.any(Object), expect.any(Function));
+      expect(server.tool).toHaveBeenCalledWith("arcane_version", expect.any(String), expect.any(Object), expect.any(Function));
+      expect(server.getHandler("arcane_version")).toBeDefined();
     });
 
     it("arcane_version calls client.system.version", async () => {
@@ -425,11 +429,11 @@ describe("MCP Tools", () => {
         data: { version: "1.2.3" },
       });
 
-      const server = createServer();
-      registerSystemTools(server, mockClient);
+      const server = createMockServer();
+      registerSystemTools(server as any, mockClient);
 
-      const toolHandler = (server as any).tools.get("arcane_version");
-      const result = await toolHandler.handler({});
+      const handler = server.getHandler("arcane_version");
+      const result = await handler({});
 
       expect(mockClient.system.version).toHaveBeenCalled();
       expect(result.content).toEqual([{ type: "text", text: expect.any(String) }]);
