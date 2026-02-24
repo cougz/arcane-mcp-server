@@ -221,6 +221,142 @@ export interface ListOptions {
   limit?: number;
 }
 
+export interface ListOptionsWithSort extends ListOptions {
+  sort?: string;
+  order?: string;
+  start?: number;
+}
+
+export interface GitRepository {
+  id: string;
+  name: string;
+  url: string;
+  authType: string;
+  description?: string;
+  enabled: boolean;
+  username?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface GitRepositoryCreate {
+  name: string;
+  url: string;
+  authType: string;
+  description?: string;
+  enabled?: boolean;
+  username?: string;
+  token?: string;
+  sshKey?: string;
+  sshHostKeyVerification?: string;
+}
+
+export interface GitRepositoryUpdate {
+  name?: string;
+  url?: string;
+  authType?: string;
+  description?: string;
+  enabled?: boolean;
+  username?: string;
+  token?: string;
+  sshKey?: string;
+  sshHostKeyVerification?: string;
+}
+
+export interface GitBranch {
+  name: string;
+  isDefault: boolean;
+}
+
+export interface GitFileNode {
+  name: string;
+  path: string;
+  type: 'file' | 'directory';
+  size?: number;
+  children?: GitFileNode[];
+}
+
+export interface GitOpsSync {
+  id: string;
+  name: string;
+  repositoryId: string;
+  branch: string;
+  composePath: string;
+  projectName?: string;
+  autoSync: boolean;
+  syncInterval?: number;
+  lastSyncAt?: string;
+  status?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface GitOpsSyncCreate {
+  name: string;
+  repositoryId: string;
+  branch: string;
+  composePath: string;
+  projectName?: string;
+  autoSync?: boolean;
+  syncInterval?: number;
+}
+
+export interface GitOpsSyncUpdate {
+  name?: string;
+  repositoryId?: string;
+  branch?: string;
+  composePath?: string;
+  projectName?: string;
+  autoSync?: boolean;
+  syncInterval?: number;
+}
+
+export interface GitOpsSyncStatus {
+  status: string;
+  lastSyncAt?: string;
+  lastSyncCommit?: string;
+  lastSyncMessage?: string;
+  errorMessage?: string;
+}
+
+export interface VolumeBackup {
+  id: string;
+  volumeName: string;
+  filename: string;
+  size?: number;
+  createdAt: string;
+}
+
+export interface VolumeFileNode {
+  name: string;
+  path: string;
+  type: 'file' | 'directory';
+  size?: number;
+  modifiedAt?: string;
+}
+
+export interface VolumeUploadFile {
+  filename: string;
+  content: string;
+}
+
+export interface ProjectUpdateExtended extends ProjectUpdate {
+  removeFiles?: boolean;
+  removeVolumes?: boolean;
+}
+
+export interface ContainerCreateOptions {
+  name: string;
+  image: string;
+  cmd?: string[];
+  env?: string[];
+  ports?: Record<string, string>;
+  volumes?: string[];
+  networks?: string[];
+  restartPolicy?: string;
+  detach?: boolean;
+}
+
 class EnvironmentsMethods {
   constructor(private client: ArcaneClient) {}
 
@@ -427,6 +563,253 @@ class SystemMethods {
   }
 }
 
+class GitRepositoriesMethods {
+  constructor(private client: ArcaneClient) {}
+
+  async list(opts?: ListOptionsWithSort): Promise<PaginatedResponse<GitRepository>> {
+    const params = new URLSearchParams();
+    if (opts?.search) params.set("search", opts.search);
+    if (opts?.sort) params.set("sort", opts.sort);
+    if (opts?.order) params.set("order", opts.order);
+    if (opts?.start) params.set("start", String(opts.start));
+    if (opts?.limit) params.set("limit", String(opts.limit));
+    const query = params.toString();
+    return this.client.request<PaginatedResponse<GitRepository>>(
+      "GET",
+      `/customize/git-repositories${query ? `?${query}` : ""}`
+    );
+  }
+
+  async get(id: string): Promise<{ success: boolean; data: GitRepository }> {
+    return this.client.request<{ success: boolean; data: GitRepository }>("GET", `/customize/git-repositories/${id}`);
+  }
+
+  async create(dto: GitRepositoryCreate): Promise<{ success: boolean; data: GitRepository }> {
+    return this.client.request<{ success: boolean; data: GitRepository }>("POST", "/customize/git-repositories", dto);
+  }
+
+  async update(id: string, dto: GitRepositoryUpdate): Promise<{ success: boolean; data: GitRepository }> {
+    return this.client.request<{ success: boolean; data: GitRepository }>("PUT", `/customize/git-repositories/${id}`, dto);
+  }
+
+  async delete(id: string): Promise<ActionResponse> {
+    return this.client.request<ActionResponse>("DELETE", `/customize/git-repositories/${id}`);
+  }
+
+  async listBranches(id: string): Promise<{ success: boolean; data: GitBranch[] }> {
+    return this.client.request<{ success: boolean; data: GitBranch[] }>("GET", `/customize/git-repositories/${id}/branches`);
+  }
+
+  async browseFiles(id: string, branch?: string, path?: string): Promise<{ success: boolean; data: GitFileNode[] }> {
+    const params = new URLSearchParams();
+    if (branch) params.set("branch", branch);
+    if (path) params.set("path", path);
+    const query = params.toString();
+    return this.client.request<{ success: boolean; data: GitFileNode[] }>(
+      "GET",
+      `/customize/git-repositories/${id}/files${query ? `?${query}` : ""}`
+    );
+  }
+
+  async test(id: string, branch?: string): Promise<ActionResponse> {
+    const body = branch ? { branch } : undefined;
+    return this.client.request<ActionResponse>("POST", `/customize/git-repositories/${id}/test`, body);
+  }
+}
+
+class GitOpsSyncsMethods {
+  constructor(private client: ArcaneClient) {}
+
+  async list(envId: string, opts?: ListOptionsWithSort): Promise<PaginatedResponse<GitOpsSync>> {
+    const params = new URLSearchParams();
+    if (opts?.search) params.set("search", opts.search);
+    if (opts?.sort) params.set("sort", opts.sort);
+    if (opts?.order) params.set("order", opts.order);
+    if (opts?.start) params.set("start", String(opts.start));
+    if (opts?.limit) params.set("limit", String(opts.limit));
+    const query = params.toString();
+    return this.client.request<PaginatedResponse<GitOpsSync>>(
+      "GET",
+      `/environments/${envId}/gitops-syncs${query ? `?${query}` : ""}`
+    );
+  }
+
+  async get(envId: string, syncId: string): Promise<{ success: boolean; data: GitOpsSync }> {
+    return this.client.request<{ success: boolean; data: GitOpsSync }>(
+      "GET",
+      `/environments/${envId}/gitops-syncs/${syncId}`
+    );
+  }
+
+  async create(envId: string, dto: GitOpsSyncCreate): Promise<{ success: boolean; data: GitOpsSync }> {
+    return this.client.request<{ success: boolean; data: GitOpsSync }>(
+      "POST",
+      `/environments/${envId}/gitops-syncs`,
+      dto
+    );
+  }
+
+  async update(envId: string, syncId: string, dto: GitOpsSyncUpdate): Promise<{ success: boolean; data: GitOpsSync }> {
+    return this.client.request<{ success: boolean; data: GitOpsSync }>(
+      "PUT",
+      `/environments/${envId}/gitops-syncs/${syncId}`,
+      dto
+    );
+  }
+
+  async delete(envId: string, syncId: string): Promise<ActionResponse> {
+    return this.client.request<ActionResponse>("DELETE", `/environments/${envId}/gitops-syncs/${syncId}`);
+  }
+
+  async browseFiles(envId: string, syncId: string, path?: string): Promise<{ success: boolean; data: GitFileNode[] }> {
+    const params = new URLSearchParams();
+    if (path) params.set("path", path);
+    const query = params.toString();
+    return this.client.request<{ success: boolean; data: GitFileNode[] }>(
+      "GET",
+      `/environments/${envId}/gitops-syncs/${syncId}/files${query ? `?${query}` : ""}`
+    );
+  }
+
+  async getStatus(envId: string, syncId: string): Promise<{ success: boolean; data: GitOpsSyncStatus }> {
+    return this.client.request<{ success: boolean; data: GitOpsSyncStatus }>(
+      "GET",
+      `/environments/${envId}/gitops-syncs/${syncId}/status`
+    );
+  }
+
+  async performSync(envId: string, syncId: string): Promise<ActionResponse> {
+    return this.client.request<ActionResponse>("POST", `/environments/${envId}/gitops-syncs/${syncId}/sync`);
+  }
+}
+
+class ProjectAdditionalMethods {
+  constructor(private client: ArcaneClient) {}
+
+  async down(envId: string, projectId: string): Promise<ActionResponse> {
+    return this.client.request<ActionResponse>("POST", `/environments/${envId}/projects/${projectId}/down`);
+  }
+
+  async pullImages(envId: string, projectId: string): Promise<ActionResponse> {
+    return this.client.request<ActionResponse>("POST", `/environments/${envId}/projects/${projectId}/pull`);
+  }
+
+  async redeploy(envId: string, projectId: string): Promise<ActionResponse> {
+    return this.client.request<ActionResponse>("POST", `/environments/${envId}/projects/${projectId}/redeploy`);
+  }
+
+  async destroy(envId: string, projectId: string, removeFiles?: boolean, removeVolumes?: boolean): Promise<ActionResponse> {
+    return this.client.request<ActionResponse>(
+      "DELETE",
+      `/environments/${envId}/projects/${projectId}/destroy?removeFiles=${removeFiles ?? false}&removeVolumes=${removeVolumes ?? false}`
+    );
+  }
+}
+
+class ContainerAdditionalMethods {
+  constructor(private client: ArcaneClient) {}
+
+  async create(envId: string, dto: ContainerCreateOptions): Promise<{ success: boolean; data: ContainerDetails }> {
+    return this.client.request<{ success: boolean; data: ContainerDetails }>("POST", `/environments/${envId}/containers`, dto);
+  }
+
+  async delete(envId: string, containerId: string, force?: boolean, volumes?: boolean): Promise<ActionResponse> {
+    const params = new URLSearchParams();
+    if (force) params.set("force", "true");
+    if (volumes) params.set("volumes", "true");
+    const query = params.toString();
+    return this.client.request<ActionResponse>(
+      "DELETE",
+      `/environments/${envId}/containers/${containerId}${query ? `?${query}` : ""}`
+    );
+  }
+
+  async update(envId: string, containerId: string): Promise<ActionResponse> {
+    return this.client.request<ActionResponse>("POST", `/environments/${envId}/containers/${containerId}/update`);
+  }
+}
+
+class VolumeBackupsMethods {
+  constructor(private client: ArcaneClient) {}
+
+  async create(envId: string, volumeName: string): Promise<{ success: boolean; data: VolumeBackup }> {
+    return this.client.request<{ success: boolean; data: VolumeBackup }>(
+      "POST",
+      `/environments/${envId}/volumes/${volumeName}/backups`
+    );
+  }
+
+  async list(envId: string, volumeName: string, opts?: ListOptionsWithSort): Promise<PaginatedResponse<VolumeBackup>> {
+    const params = new URLSearchParams();
+    if (opts?.search) params.set("search", opts.search);
+    if (opts?.sort) params.set("sort", opts.sort);
+    if (opts?.order) params.set("order", opts.order);
+    if (opts?.start) params.set("start", String(opts.start));
+    if (opts?.limit) params.set("limit", String(opts.limit));
+    const query = params.toString();
+    return this.client.request<PaginatedResponse<VolumeBackup>>(
+      "GET",
+      `/environments/${envId}/volumes/${volumeName}/backups${query ? `?${query}` : ""}`
+    );
+  }
+
+  async delete(envId: string, backupId: string): Promise<ActionResponse> {
+    return this.client.request<ActionResponse>("DELETE", `/environments/${envId}/volumes/backups/${backupId}`);
+  }
+
+  async download(envId: string, backupId: string): Promise<Blob> {
+    const response = await fetch(`${this.client.getBaseUrl()}/environments/${envId}/volumes/backups/${backupId}/download`, {
+      method: "GET",
+      headers: {
+        "X-API-Key": this.client.getApiKey(),
+      },
+    });
+
+    if (!response.ok) {
+      let message = response.statusText;
+      try {
+        const err = (await response.json()) as { detail?: string };
+        if (err.detail) message = err.detail;
+      } catch {}
+      throw new ArcaneApiError(response.status, message);
+    }
+
+    return response.blob();
+  }
+
+  async restore(envId: string, volumeName: string, backupId: string): Promise<ActionResponse> {
+    return this.client.request<ActionResponse>(
+      "POST",
+      `/environments/${envId}/volumes/${volumeName}/backups/${backupId}/restore`
+    );
+  }
+}
+
+class VolumeFilesMethods {
+  constructor(private client: ArcaneClient) {}
+
+  async browse(envId: string, volumeName: string, path?: string): Promise<{ success: boolean; data: VolumeFileNode[] }> {
+    const params = new URLSearchParams();
+    if (path) params.set("path", path);
+    const query = params.toString();
+    return this.client.request<{ success: boolean; data: VolumeFileNode[] }>(
+      "GET",
+      `/environments/${envId}/volumes/${volumeName}/browse${query ? `?${query}` : ""}`
+    );
+  }
+
+  async upload(envId: string, volumeName: string, filename: string, content: string, path?: string): Promise<ActionResponse> {
+    const params = new URLSearchParams();
+    if (path) params.set("path", path);
+    const query = params.toString();
+    return this.client.request<ActionResponse>(
+      "POST",
+      `/environments/${envId}/volumes/${volumeName}/browse/upload${query ? `?${query}` : ""}`,
+      { filename, content }
+    );
+  }
+}
+
 export class ArcaneClient {
   private readonly baseUrl: string;
   private readonly apiKey: string;
@@ -439,6 +822,12 @@ export class ArcaneClient {
   readonly networks: NetworksMethods;
   readonly templates: TemplatesMethods;
   readonly system: SystemMethods;
+  readonly gitRepositories: GitRepositoriesMethods;
+  readonly gitOpsSyncs: GitOpsSyncsMethods;
+  readonly projectAdditional: ProjectAdditionalMethods;
+  readonly containerAdditional: ContainerAdditionalMethods;
+  readonly volumeBackups: VolumeBackupsMethods;
+  readonly volumeFiles: VolumeFilesMethods;
 
   constructor(host: string, apiKey: string) {
     this.baseUrl = host.replace(/\/+$/, "") + "/api";
@@ -451,6 +840,20 @@ export class ArcaneClient {
     this.networks = new NetworksMethods(this);
     this.templates = new TemplatesMethods(this);
     this.system = new SystemMethods(this);
+    this.gitRepositories = new GitRepositoriesMethods(this);
+    this.gitOpsSyncs = new GitOpsSyncsMethods(this);
+    this.projectAdditional = new ProjectAdditionalMethods(this);
+    this.containerAdditional = new ContainerAdditionalMethods(this);
+    this.volumeBackups = new VolumeBackupsMethods(this);
+    this.volumeFiles = new VolumeFilesMethods(this);
+  }
+
+  getBaseUrl(): string {
+    return this.baseUrl;
+  }
+
+  getApiKey(): string {
+    return this.apiKey;
   }
 
   async request<T>(method: string, path: string, body?: unknown): Promise<T> {
