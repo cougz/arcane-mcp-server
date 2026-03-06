@@ -23,6 +23,8 @@ export async function handleAccessRequest(
 ) {
 	const { pathname, searchParams } = new URL(request.url);
 
+	console.log(`[access-handler] ${request.method} ${pathname}`);
+
 	// Derive all OIDC endpoint URLs from team name and client ID
 	const oidcBase = `https://${env.ACCESS_TEAM_NAME}.cloudflareaccess.com/cdn-cgi/access/sso/oidc/${env.ACCESS_CLIENT_ID}`;
 	const tokenUrl = `${oidcBase}/token`;
@@ -30,20 +32,23 @@ export async function handleAccessRequest(
 	const jwksUrl = `${oidcBase}/jwks`;
 
 	if (request.method === "GET" && pathname === "/authorize") {
+		console.log("[access-handler] GET /authorize - parsing auth request");
 		const oauthReqInfo = await env.OAUTH_PROVIDER.parseAuthRequest(request);
 		const { clientId } = oauthReqInfo;
 		if (!clientId) {
+			console.error("[access-handler] GET /authorize - missing clientId");
 			return new Response("Invalid request", { status: 400 });
 		}
 
 		// Check if client is already approved
 		if (await isClientApproved(request, clientId, env.COOKIE_ENCRYPTION_KEY)) {
-			// Skip approval dialog but still create secure state
+			console.log("[access-handler] GET /authorize - client already approved, skipping dialog");
 			const { stateToken } = await createOAuthState(oauthReqInfo, env.OAUTH_KV);
 			return redirectToAccess(request, env, authorizationUrl, stateToken);
 		}
 
 		// Generate CSRF protection for the approval form
+		console.log("[access-handler] GET /authorize - rendering approval dialog");
 		const { token: csrfToken, setCookie } = generateCSRFProtection();
 
 		return renderApprovalDialog(request, {
@@ -60,16 +65,20 @@ export async function handleAccessRequest(
 	}
 
 	if (request.method === "POST" && pathname === "/authorize") {
+		console.log("[access-handler] POST /authorize - processing approval");
 		try {
 			// Read form data once at top
 			const formData = await request.formData();
+			console.log("[access-handler] POST /authorize - form data keys:", [...formData.keys()]);
 
 			// Validate CSRF token - pass parsed FormData
 			validateCSRFToken(formData, request);
+			console.log("[access-handler] POST /authorize - CSRF valid");
 
 			// Extract state from form data
 			const encodedState = formData.get("state");
 			if (!encodedState || typeof encodedState !== "string") {
+				console.error("[access-handler] POST /authorize - missing state in form data");
 				return new Response("Missing state in form data", { status: 400 });
 			}
 
@@ -77,13 +86,16 @@ export async function handleAccessRequest(
 			try {
 				state = JSON.parse(atob(encodedState));
 			} catch (_e) {
+				console.error("[access-handler] POST /authorize - failed to parse state:", _e);
 				return new Response("Invalid state data", { status: 400 });
 			}
 
 			if (!state.oauthReqInfo || !state.oauthReqInfo.clientId) {
+				console.error("[access-handler] POST /authorize - invalid oauthReqInfo in state");
 				return new Response("Invalid request", { status: 400 });
 			}
 
+			console.log("[access-handler] POST /authorize - adding approved client");
 			// Add client to approved list
 			const approvedClientCookie = await addApprovedClient(
 				request,
@@ -91,14 +103,16 @@ export async function handleAccessRequest(
 				env.COOKIE_ENCRYPTION_KEY,
 			);
 
+			console.log("[access-handler] POST /authorize - creating OAuth state in KV");
 			// Create OAuth state with CSRF protection
 			const { stateToken } = await createOAuthState(state.oauthReqInfo, env.OAUTH_KV);
 
+			console.log("[access-handler] POST /authorize - redirecting to Access");
 			return redirectToAccess(request, env, authorizationUrl, stateToken, {
 				"Set-Cookie": approvedClientCookie,
 			});
 		} catch (error: any) {
-			console.error("POST /authorize error:", error);
+			console.error("[access-handler] POST /authorize error:", error?.message, error?.stack);
 			if (error instanceof OAuthError) {
 				return error.toResponse();
 			}
@@ -108,24 +122,28 @@ export async function handleAccessRequest(
 	}
 
 	if (request.method === "GET" && pathname === "/callback") {
+		console.log("[access-handler] GET /callback - validating OAuth state");
 		// Validate OAuth state (retrieves stored data from KV)
 		let oauthReqInfo: AuthRequest;
 
 		try {
 			const result = await validateOAuthState(request, env.OAUTH_KV);
 			oauthReqInfo = result.oauthReqInfo;
+			console.log("[access-handler] GET /callback - state valid, clientId:", oauthReqInfo.clientId);
 		} catch (error: any) {
+			console.error("[access-handler] GET /callback - validateOAuthState error:", error?.message, error?.stack);
 			if (error instanceof OAuthError) {
 				return error.toResponse();
 			}
-			// Unexpected non-OAuth error
 			return new Response("Internal server error", { status: 500 });
 		}
 
 		if (!oauthReqInfo.clientId) {
+			console.error("[access-handler] GET /callback - missing clientId in oauthReqInfo");
 			return new Response("Invalid OAuth request data", { status: 400 });
 		}
 
+		console.log("[access-handler] GET /callback - exchanging code for token, tokenUrl:", tokenUrl);
 		// Exchange the code for an access token
 		const [accessToken, idToken, errResponse] = await fetchUpstreamAuthToken({
 			client_id: env.ACCESS_CLIENT_ID,
@@ -135,15 +153,18 @@ export async function handleAccessRequest(
 			upstream_url: tokenUrl,
 		});
 		if (errResponse) {
+			console.error("[access-handler] GET /callback - token exchange failed:", errResponse.status);
 			return errResponse;
 		}
 
+		console.log("[access-handler] GET /callback - verifying id_token");
 		const idTokenClaims = await verifyToken(jwksUrl, idToken);
 		const user = {
 			email: idTokenClaims.email,
 			name: idTokenClaims.name,
 			sub: idTokenClaims.sub,
 		};
+		console.log("[access-handler] GET /callback - user verified, sub:", user.sub, "email:", user.email);
 
 		// Return back to the MCP client a new token
 		const { redirectTo } = await env.OAUTH_PROVIDER.completeAuthorization({
@@ -162,9 +183,11 @@ export async function handleAccessRequest(
 			userId: user.sub,
 		});
 
+		console.log("[access-handler] GET /callback - authorization complete, redirecting");
 		return Response.redirect(redirectTo, 302);
 	}
 
+	console.log("[access-handler] no route matched:", request.method, pathname);
 	return new Response("Not Found", { status: 404 });
 }
 
