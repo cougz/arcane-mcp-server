@@ -1,5 +1,4 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { z } from "zod";
 import type { ArcaneClient } from "../arcane-client";
 
 export function registerSystemTools(server: McpServer, client: ArcaneClient): void {
@@ -10,10 +9,17 @@ export function registerSystemTools(server: McpServer, client: ArcaneClient): vo
     async () => {
       try {
         const result = await client.system.version();
+        const lines = [
+          `Arcane version: ${result.displayVersion}`,
+          `Go version: ${result.goVersion}`,
+          `Revision: ${result.shortRevision}`,
+          ...(result.buildTime ? [`Build time: ${result.buildTime}`] : []),
+          result.updateAvailable
+            ? `Update available: ${result.newestVersion} — ${result.releaseUrl}`
+            : `Up to date`,
+        ];
         return {
-          content: [
-            { type: "text", text: `Arcane version: ${result.data.version}` },
-          ],
+          content: [{ type: "text", text: lines.join("\n") }],
         };
       } catch (err) {
         return {

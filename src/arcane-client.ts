@@ -558,8 +558,19 @@ class TemplatesMethods {
 class SystemMethods {
   constructor(private client: ArcaneClient) {}
 
-  async version(): Promise<{ success: boolean; data: { version: string } }> {
-    return this.client.request<{ success: boolean; data: { version: string } }>("GET", "/version");
+  async version(): Promise<{
+    currentVersion: string;
+    displayVersion: string;
+    goVersion: string;
+    buildTime?: string;
+    revision: string;
+    shortRevision: string;
+    isSemverVersion: boolean;
+    updateAvailable: boolean;
+    newestVersion?: string;
+    releaseUrl?: string;
+  }> {
+    return this.client.request("GET", "/app-version");
   }
 }
 
