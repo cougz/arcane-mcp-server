@@ -23,10 +23,9 @@ export class ArcaneAgent extends McpAgent<Env, Record<string, never>, Record<str
   });
 
   async init() {
-    console.log("[arcane-mcp] Connecting via Cloudflare VPC binding → arcane1.home.seiffert.me:3552");
+    console.log("[arcane-mcp] Connecting to Arcane via Cloudflare VPC service binding");
 
     const client = new ArcaneClient(
-      "http://arcane1.home.seiffert.me",
       this.env.ARCANE_API_KEY,
       this.env.VPC_SERVICE,
     );

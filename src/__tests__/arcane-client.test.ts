@@ -9,7 +9,7 @@ describe("ArcaneClient", () => {
     mockFetch = vi.spyOn(globalThis, "fetch").mockImplementation(() => {
       throw new Error("fetch not mocked");
     });
-    client = new ArcaneClient("http://localhost:3552", "test-api-key");
+    client = new ArcaneClient("test-api-key");
   });
 
   afterEach(() => {
@@ -17,13 +17,8 @@ describe("ArcaneClient", () => {
   });
 
   describe("Constructor", () => {
-    it("strips trailing slash from host", () => {
-      const clientWithSlash = new ArcaneClient("http://localhost:3552/", "key");
-      expect((clientWithSlash as any).baseUrl).toBe("http://localhost:3552/api");
-    });
-
-    it("appends /api to form the base URL", () => {
-      expect((client as any).baseUrl).toBe("http://localhost:3552/api");
+    it("sets baseUrl to /api", () => {
+      expect((client as any).baseUrl).toBe("/api");
     });
 
     it("stores the API key", () => {
