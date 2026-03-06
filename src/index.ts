@@ -1,6 +1,9 @@
+import OAuthProvider from "@cloudflare/workers-oauth-provider";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { McpAgent } from "agents/mcp";
 import { ArcaneClient } from "./arcane-client";
+import { handleAccessRequest } from "./access-handler";
+import type { Props } from "./workers-oauth-utils";
 import { registerEnvironmentTools } from "./tools/environments";
 import { registerStackTools } from "./tools/stacks";
 import { registerContainerTools } from "./tools/containers";
@@ -16,7 +19,7 @@ import { registerGitRepositoryTools } from "./tools/git-repositories";
 import { registerGitOpsSyncTools } from "./tools/gitops-syncs";
 import { registerProjectAdditionalTools } from "./tools/projects-additional";
 
-export class ArcaneAgent extends McpAgent<Env, Record<string, never>, Record<string, never>> {
+export class ArcaneAgent extends McpAgent<Env, Record<string, never>, Props> {
   server = new McpServer({
     name: "Arcane Docker MCP Server",
     version: "1.0.0",
@@ -47,4 +50,11 @@ export class ArcaneAgent extends McpAgent<Env, Record<string, never>, Record<str
   }
 }
 
-export default ArcaneAgent.serve("/mcp");
+export default new OAuthProvider({
+  apiHandler: ArcaneAgent.serve("/mcp"),
+  apiRoute: "/mcp",
+  authorizeEndpoint: "/authorize",
+  clientRegistrationEndpoint: "/register",
+  defaultHandler: { fetch: handleAccessRequest as any },
+  tokenEndpoint: "/token",
+});

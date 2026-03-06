@@ -19,6 +19,15 @@
       }
     ]
   },
+  "kv_namespaces": [
+    {
+      "binding": "OAUTH_KV",
+      "id": "66663faf74ba46118b8f80daa4547348"
+    }
+  ],
+  "vars": {
+    "ACCESS_OIDC_BASE_URL": "https://cougz.cloudflareaccess.com/cdn-cgi/access/sso/oidc/2601685da52af613ed93759fe938351e4fab03b55a5093c8a3209c618261a08c"
+  },
   "vpc_services": [
     {
       "binding": "VPC_SERVICE",

@@ -10,6 +10,11 @@ declare namespace Cloudflare {
 		ARCANE_API_KEY: string;
 		VPC_SERVICE: Fetcher;
 		MCP_OBJECT: DurableObjectNamespace<import("./src/index").ArcaneAgent>;
+		OAUTH_KV: KVNamespace;
+		ACCESS_CLIENT_ID: string;
+		ACCESS_CLIENT_SECRET: string;
+		COOKIE_ENCRYPTION_KEY: string;
+		ACCESS_OIDC_BASE_URL: string;
 	}
 }
 interface Env extends Cloudflare.Env {}
