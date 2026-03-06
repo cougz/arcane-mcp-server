@@ -17,8 +17,8 @@ describe("ArcaneClient", () => {
   });
 
   describe("Constructor", () => {
-    it("sets baseUrl to /api", () => {
-      expect((client as any).baseUrl).toBe("/api");
+    it("sets baseUrl to http://placeholder/api", () => {
+      expect((client as any).baseUrl).toBe("http://placeholder/api");
     });
 
     it("stores the API key", () => {

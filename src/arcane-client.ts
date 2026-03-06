@@ -834,7 +834,7 @@ export class ArcaneClient {
   // entirely by the Cloudflare VPC service binding configured in wrangler.jsonc.
   // The fetcher overrides the transport; only the path portion of URLs matters.
   constructor(apiKey: string, fetcher?: Fetcher) {
-    this.baseUrl = "/api";
+    this.baseUrl = "http://placeholder/api";
     this.apiKey = apiKey;
     this._fetch = fetcher ? fetcher.fetch.bind(fetcher) : fetch;
     this.environments = new EnvironmentsMethods(this);
