@@ -86,10 +86,9 @@ Copy the example environment file and fill in your values:
 cp .dev.vars.example .dev.vars
 ```
 
-Edit `.dev.vars` with your Arcane instance details:
+Edit `.dev.vars` with your Arcane API key:
 
 ```
-ARCANE_HOST=http://localhost:3552
 ARCANE_API_KEY=your-api-key-here
 ```
 
@@ -216,14 +215,13 @@ Secrets are managed through the Cloudflare Dashboard:
 1. Navigate to **Cloudflare Dashboard** → **Workers & Pages**
 2. Select your `arcane-mcp-server` worker
 3. Go to **Settings** → **Variables and Secrets**
-4. Add the following secrets (type: **Secret**):
+4. Add the following secret (type: **Secret**):
 
 | Name | Description |
 |------|-------------|
-| `ARCANE_HOST` | Your Arcane instance URL (e.g., `http://localhost:3552` or `https://your-arcane-instance.com`) |
 | `ARCANE_API_KEY` | Your Arcane API key |
 
-**Important:** Do not use `wrangler secret put` for Workers Builds deployments. Secrets set through the CLI are disconnected from the Workers Builds pipeline. Always use the Dashboard for secrets in production deployments.
+The Arcane host and port are configured via the Cloudflare VPC service binding (`service_id` in `wrangler.jsonc`) and do not need to be set here.
 
 ## Deployment via Cloudflare Workers Builds
 
