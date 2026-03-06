@@ -23,7 +23,12 @@ export class ArcaneAgent extends McpAgent<Env, Record<string, never>, Record<str
   });
 
   async init() {
-    const client = new ArcaneClient(this.env.ARCANE_HOST, this.env.ARCANE_API_KEY);
+    const useVpc = this.env.USE_VPC === "true";
+    const client = new ArcaneClient(
+      useVpc ? "http://arcane1.home.seiffert.me" : this.env.ARCANE_HOST,
+      this.env.ARCANE_API_KEY,
+      useVpc ? this.env.VPC_SERVICE : undefined,
+    );
 
     registerEnvironmentTools(this.server, client);
     registerStackTools(this.server, client);

@@ -18,6 +18,16 @@
       }
     ]
   },
+  "vars": {
+    "USE_VPC": "true"
+  },
+  "vpc_services": [
+    {
+      "binding": "VPC_SERVICE",
+      "service_id": "019cc2aa-a517-7282-b98f-ddc9da5581ea",
+      "remote": true
+    }
+  ],
   "observability": {
     "enabled": true
   },

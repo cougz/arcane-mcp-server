@@ -10,6 +10,7 @@ export default defineConfig({
           bindings: {
             ARCANE_HOST: "http://localhost:3552",
             ARCANE_API_KEY: "test-api-key",
+            USE_VPC: "false",
           },
         },
       },

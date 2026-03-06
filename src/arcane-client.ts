@@ -758,7 +758,7 @@ class VolumeBackupsMethods {
   }
 
   async download(envId: string, backupId: string): Promise<Blob> {
-    const response = await fetch(`${this.client.getBaseUrl()}/environments/${envId}/volumes/backups/${backupId}/download`, {
+    const response = await this.client.fetchFn(`${this.client.getBaseUrl()}/environments/${envId}/volumes/backups/${backupId}/download`, {
       method: "GET",
       headers: {
         "X-API-Key": this.client.getApiKey(),
@@ -813,6 +813,7 @@ class VolumeFilesMethods {
 export class ArcaneClient {
   private readonly baseUrl: string;
   private readonly apiKey: string;
+  private readonly _fetch: (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
   readonly environments: EnvironmentsMethods;
   readonly stacks: StacksMethods;
@@ -829,9 +830,10 @@ export class ArcaneClient {
   readonly volumeBackups: VolumeBackupsMethods;
   readonly volumeFiles: VolumeFilesMethods;
 
-  constructor(host: string, apiKey: string) {
+  constructor(host: string, apiKey: string, fetcher?: Fetcher) {
     this.baseUrl = host.replace(/\/+$/, "") + "/api";
     this.apiKey = apiKey;
+    this._fetch = fetcher ? fetcher.fetch.bind(fetcher) : fetch;
     this.environments = new EnvironmentsMethods(this);
     this.stacks = new StacksMethods(this);
     this.containers = new ContainersMethods(this);
@@ -856,9 +858,13 @@ export class ArcaneClient {
     return this.apiKey;
   }
 
+  get fetchFn(): (input: string | URL | Request, init?: RequestInit) => Promise<Response> {
+    return this._fetch;
+  }
+
   async request<T>(method: string, path: string, body?: unknown): Promise<T> {
     const url = `${this.baseUrl}${path}`;
-    const response = await fetch(url, {
+    const response = await this._fetch(url, {
       method,
       headers: {
         "X-API-Key": this.apiKey,

@@ -9,6 +9,8 @@ declare namespace Cloudflare {
 	interface Env {
 		ARCANE_HOST: string;
 		ARCANE_API_KEY: string;
+		USE_VPC: string;
+		VPC_SERVICE: Fetcher;
 		MCP_OBJECT: DurableObjectNamespace<import("./src/index").ArcaneAgent>;
 	}
 }
