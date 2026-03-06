@@ -14,7 +14,7 @@ declare namespace Cloudflare {
 		ACCESS_CLIENT_ID: string;
 		ACCESS_CLIENT_SECRET: string;
 		COOKIE_ENCRYPTION_KEY: string;
-		ACCESS_OIDC_BASE_URL: string;
+		ACCESS_TEAM_NAME: string;
 	}
 }
 interface Env extends Cloudflare.Env {}

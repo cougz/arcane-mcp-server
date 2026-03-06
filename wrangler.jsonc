@@ -26,7 +26,7 @@
     }
   ],
   "vars": {
-    "ACCESS_OIDC_BASE_URL": "https://cougz.cloudflareaccess.com/cdn-cgi/access/sso/oidc/2601685da52af613ed93759fe938351e4fab03b55a5093c8a3209c618261a08c"
+    "ACCESS_TEAM_NAME": "cougz"
   },
   "vpc_services": [
     {

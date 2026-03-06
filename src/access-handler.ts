@@ -23,10 +23,11 @@ export async function handleAccessRequest(
 ) {
 	const { pathname, searchParams } = new URL(request.url);
 
-	// Derive all OIDC endpoint URLs from the single base URL
-	const tokenUrl = `${env.ACCESS_OIDC_BASE_URL}/token`;
-	const authorizationUrl = `${env.ACCESS_OIDC_BASE_URL}/authorization`;
-	const jwksUrl = `${env.ACCESS_OIDC_BASE_URL}/jwks`;
+	// Derive all OIDC endpoint URLs from team name and client ID
+	const oidcBase = `https://${env.ACCESS_TEAM_NAME}.cloudflareaccess.com/cdn-cgi/access/sso/oidc/${env.ACCESS_CLIENT_ID}`;
+	const tokenUrl = `${oidcBase}/token`;
+	const authorizationUrl = `${oidcBase}/authorization`;
+	const jwksUrl = `${oidcBase}/jwks`;
 
 	if (request.method === "GET" && pathname === "/authorize") {
 		const oauthReqInfo = await env.OAUTH_PROVIDER.parseAuthRequest(request);
