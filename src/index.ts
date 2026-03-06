@@ -24,8 +24,18 @@ export class ArcaneAgent extends McpAgent<Env, Record<string, never>, Record<str
 
   async init() {
     const useVpc = this.env.USE_VPC === "true";
+
+    if (useVpc) {
+      console.log("[arcane-mcp] Using Cloudflare VPC binding (VPC_SERVICE) → arcane1.home.seiffert.me:3552");
+    } else {
+      if (!this.env.ARCANE_HOST) {
+        throw new Error("[arcane-mcp] USE_VPC is false but ARCANE_HOST is not set");
+      }
+      console.log(`[arcane-mcp] Using direct HTTP connection → ${this.env.ARCANE_HOST}`);
+    }
+
     const client = new ArcaneClient(
-      useVpc ? "http://arcane1.home.seiffert.me" : this.env.ARCANE_HOST,
+      useVpc ? "http://arcane1.home.seiffert.me" : this.env.ARCANE_HOST!,
       this.env.ARCANE_API_KEY,
       useVpc ? this.env.VPC_SERVICE : undefined,
     );

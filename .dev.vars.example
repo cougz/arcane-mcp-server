@@ -1,7 +1,7 @@
-# Set USE_VPC=true to route requests through the Cloudflare VPC service binding
-# (requires VPC_SERVICE binding configured in wrangler.jsonc).
-# When USE_VPC=true, ARCANE_HOST is not used for routing — the VPC service
-# configuration defines the destination. ARCANE_HOST is only needed locally.
+# USE_VPC=true  → routes via Cloudflare VPC service binding (production).
+#                  ARCANE_HOST is not required and is ignored.
+# USE_VPC=false → routes directly to ARCANE_HOST (local dev only).
+#                  ARCANE_HOST must be set or the Worker will throw on startup.
 USE_VPC=false
 ARCANE_HOST=http://your-arcane-instance:3552
 ARCANE_API_KEY=your-api-key-here
