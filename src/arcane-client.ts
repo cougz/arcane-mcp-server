@@ -216,6 +216,144 @@ export interface ActionResponse {
   message: string;
 }
 
+/**
+ * One line of the NDJSON stream emitted by the compose action endpoints
+ * (/up and /redeploy). Arcane serves these as `application/x-json-stream`:
+ *   {"type":"activity","activityId":"..."}   // opening handle
+ *   {"log":" Container foo Recreated "}       // docker compose progress lines
+ *   {"done":true}                             // terminal success marker
+ *   {"error":"..."}                           // emitted instead on failure
+ * `success`/`message` are only present in the defensive single-object fallback
+ * (some Arcane versions/endpoints may answer with a plain ActionResponse).
+ */
+export interface ComposeStreamEvent {
+  type?: string;
+  activityId?: string;
+  log?: string;
+  done?: boolean;
+  error?: string;
+  success?: boolean;
+  message?: string;
+}
+
+/**
+ * Aggregate an NDJSON compose stream into a single ActionResponse.
+ * Surfaces stream errors actionably and treats `{"done":true}` as success.
+ */
+function summarizeComposeStream(events: ComposeStreamEvent[], action: string): ActionResponse {
+  const errors = events.filter(e => e.error).map(e => e.error as string);
+  if (errors.length > 0) {
+    return { success: false, message: `${action} failed: ${errors.join("; ")}` };
+  }
+
+  // Defensive fallback: a non-streaming response (single ActionResponse object).
+  // requestNdjson yields it as one event — pass it through unchanged.
+  if (events.length === 1 && typeof events[0]?.success === "boolean") {
+    return { success: events[0].success as boolean, message: events[0].message ?? `${action} finished` };
+  }
+
+  const done = events.some(e => e.done === true);
+  const logs = events
+    .filter(e => typeof e.log === "string")
+    .map(e => (e.log as string).trim())
+    .filter(Boolean);
+  return {
+    success: done,
+    message: logs.length > 0 ? logs.join(" | ") : `${action} finished (${events.length} events)`,
+  };
+}
+
+/**
+ * One line of the NDJSON stream emitted by the /pull endpoints (docker pull
+ * progress, `application/x-json-stream`). Unlike the compose streams (/up,
+ * /redeploy), which emit an explicit `{"done":true}` terminal marker, docker-pull
+ * streams have no observed terminal success sentinel.
+ */
+export interface PullStreamEvent {
+  status?: string;
+  error?: string;
+  errorDetail?: { message?: string };
+  id?: string;
+  success?: boolean;
+  message?: string;
+}
+
+/**
+ * Extract the error text from a pull event, whichever shape it arrived in.
+ * The OpenAPI spec declares /pull's 200 response with no `content`, so the
+ * stream shape isn't specified: Arcane may report a failed layer via the plain
+ * `error` string, or via `errorDetail` (an object, typically
+ * `{"message":"..."}`). When both are present with the same text, `error`
+ * wins so the text isn't duplicated in the aggregated message.
+ */
+function extractPullError(e: PullStreamEvent): string | undefined {
+  if (typeof e.error === "string" && e.error.length > 0) return e.error;
+  if (e.errorDetail && typeof e.errorDetail.message === "string" && e.errorDetail.message.length > 0) {
+    return e.errorDetail.message;
+  }
+  return undefined;
+}
+
+/**
+ * Aggregate an NDJSON docker-pull stream into a single ActionResponse.
+ *
+ * A `{"status":"complete"}` sentinel has never been observed against a real
+ * server (checked against Arcane v2.7.0: an errorless 2-event pull stream never
+ * emits it). In docker-pull semantics, absence of an error IS the success
+ * signal, so this mirrors summarizeComposeStream()'s priority order (errors
+ * first, then the single-object fallback) but treats "no errors" as the
+ * normal-case success rather than requiring a sentinel.
+ */
+function summarizePullStream(events: PullStreamEvent[], action: string): ActionResponse {
+  const errors = events.map(extractPullError).filter((e): e is string => typeof e === "string");
+  if (errors.length > 0) {
+    return { success: false, message: `${action} failed: ${errors.join("; ")}` };
+  }
+
+  // Defensive fallback: a non-streaming response (single ActionResponse object).
+  // requestNdjson yields it as one event — pass it through unchanged.
+  if (events.length === 1 && typeof events[0]?.success === "boolean") {
+    return { success: events[0].success as boolean, message: events[0].message ?? `${action} finished` };
+  }
+
+  // An empty stream is not evidence of success. "Absence of error" only reads
+  // as success when there's a stream to have observed errors in: a real
+  // docker-pull stream always emits at least one status line, even when
+  // there's nothing new to pull. Zero events is indistinguishable from a
+  // truncated or otherwise anomalous response, so this does NOT default to
+  // success the way an errorless multi-event stream does.
+  if (events.length === 0) {
+    return { success: false, message: `${action} returned no events; cannot confirm success` };
+  }
+
+  // No error events observed: in docker-pull semantics that IS success.
+  // Surface real event info in the message (status lines, tagged with their
+  // layer id when present) rather than degrading to a bare count.
+  const statusLines = events
+    .filter(e => typeof e.status === "string" && e.status.length > 0)
+    .map(e => (e.id ? `${e.id}: ${e.status}` : (e.status as string)));
+
+  // Docker repeats identical status text for many progress ticks per layer
+  // (e.g. "Downloading", "Extracting" — only the byte counters we don't
+  // capture change between ticks). Collapse consecutive duplicates before
+  // taking the tail, so the message doesn't degrade into the same line
+  // repeated 5 times.
+  const dedupedStatusLines = statusLines.filter((line, i) => line !== statusLines[i - 1]);
+
+  let message: string;
+  if (dedupedStatusLines.length > 0) {
+    // Keep the message readable: the tail of the stream is the most relevant part.
+    message = dedupedStatusLines.slice(-5).join(" | ");
+  } else {
+    const ids = [...new Set(events.filter(e => typeof e.id === "string").map(e => e.id as string))];
+    message = ids.length > 0
+      ? `${action} finished for: ${ids.join(", ")}`
+      : `${action} finished (${events.length} events)`;
+  }
+
+  return { success: true, message };
+}
+
 export interface ListOptions {
   search?: string;
   limit?: number;
@@ -418,7 +556,13 @@ class StacksMethods {
   }
 
   async start(envId: string, stackId: string): Promise<ActionResponse> {
-    return this.client.request<ActionResponse>("POST", `/environments/${envId}/projects/${stackId}/up`);
+    // /up streams NDJSON (docker compose up progress), not a single JSON object.
+    // Parse the stream and summarize it as an ActionResponse.
+    const events = await this.client.requestNdjson<ComposeStreamEvent>(
+      "POST",
+      `/environments/${envId}/projects/${stackId}/up`
+    );
+    return summarizeComposeStream(events, "Start");
   }
 
   async stop(envId: string, stackId: string): Promise<ActionResponse> {
@@ -430,7 +574,15 @@ class StacksMethods {
   }
 
   async pull(envId: string, stackId: string): Promise<ActionResponse> {
-    return this.client.request<ActionResponse>("POST", `/environments/${envId}/projects/${stackId}/pull-project-images`);
+    // The path used here was /pull-project-images, which is the operationId of
+    // this endpoint in the OpenAPI spec, not its path; the spec declares the
+    // route as /pull. /pull returns NDJSON (newline-delimited JSON) streaming
+    // docker pull progress. Parse it and summarize as an ActionResponse.
+    const events = await this.client.requestNdjson<PullStreamEvent>(
+      "POST",
+      `/environments/${envId}/projects/${stackId}/pull`
+    );
+    return summarizePullStream(events, "Pull");
   }
 }
 
@@ -702,11 +854,23 @@ class ProjectAdditionalMethods {
   }
 
   async pullImages(envId: string, projectId: string): Promise<ActionResponse> {
-    return this.client.request<ActionResponse>("POST", `/environments/${envId}/projects/${projectId}/pull`);
+    // Endpoint /pull returns NDJSON (newline-delimited JSON) streaming docker pull progress.
+    // Use requestNdjson to parse the stream and summarize it as an ActionResponse.
+    const events = await this.client.requestNdjson<PullStreamEvent>(
+      "POST",
+      `/environments/${envId}/projects/${projectId}/pull`
+    );
+    return summarizePullStream(events, "Pull");
   }
 
   async redeploy(envId: string, projectId: string): Promise<ActionResponse> {
-    return this.client.request<ActionResponse>("POST", `/environments/${envId}/projects/${projectId}/redeploy`);
+    // /redeploy streams NDJSON (docker compose down+up progress), like /up.
+    // Parse the stream and summarize it as an ActionResponse.
+    const events = await this.client.requestNdjson<ComposeStreamEvent>(
+      "POST",
+      `/environments/${envId}/projects/${projectId}/redeploy`
+    );
+    return summarizeComposeStream(events, "Redeploy");
   }
 
   async destroy(envId: string, projectId: string, removeFiles?: boolean, removeVolumes?: boolean): Promise<ActionResponse> {
@@ -897,5 +1061,44 @@ export class ArcaneClient {
     }
 
     return response.json() as Promise<T>;
+  }
+
+  /**
+   * Like `request<T>`, but parses the response as NDJSON (newline-delimited JSON).
+   * Used for streaming endpoints like /pull that emit one JSON object per line.
+   * Returns an array with one entry per parsed line. Empty/blank lines are skipped.
+   */
+  async requestNdjson<T = unknown>(method: string, path: string, body?: unknown): Promise<T[]> {
+    const url = `${this.baseUrl}${path}`;
+    const response = await this._fetch(url, {
+      method,
+      headers: {
+        "X-API-Key": this.apiKey,
+        ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+      },
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+    });
+
+    if (!response.ok) {
+      let message = response.statusText;
+      try {
+        const err = (await response.json()) as { detail?: string };
+        if (err.detail) message = err.detail;
+      } catch {}
+      throw new ArcaneApiError(response.status, message);
+    }
+
+    const text = await response.text();
+    const events: T[] = [];
+    for (const line of text.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      try {
+        events.push(JSON.parse(trimmed) as T);
+      } catch {
+        // Ignore unparseable lines (e.g. trailing partial chunks)
+      }
+    }
+    return events;
   }
 }

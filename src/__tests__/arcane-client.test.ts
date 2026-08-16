@@ -108,7 +108,7 @@ describe("ArcaneClient", () => {
       await client.environments.list({ search: "test", limit: 10 });
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3552/api/environments?search=test&limit=10",
+        "http://placeholder/api/environments?search=test&limit=10",
         expect.objectContaining({ method: "GET" })
       );
     });
@@ -122,7 +122,7 @@ describe("ArcaneClient", () => {
       await client.environments.get("123");
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3552/api/environments/123",
+        "http://placeholder/api/environments/123",
         expect.objectContaining({ method: "GET" })
       );
     });
@@ -137,7 +137,7 @@ describe("ArcaneClient", () => {
       await client.environments.create(dto);
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3552/api/environments",
+        "http://placeholder/api/environments",
         expect.objectContaining({
           method: "POST",
           body: JSON.stringify(dto),
@@ -155,7 +155,7 @@ describe("ArcaneClient", () => {
       await client.environments.update("123", dto);
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3552/api/environments/123",
+        "http://placeholder/api/environments/123",
         expect.objectContaining({
           method: "PUT",
           body: JSON.stringify(dto),
@@ -172,7 +172,7 @@ describe("ArcaneClient", () => {
       await client.environments.delete("123");
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3552/api/environments/123",
+        "http://placeholder/api/environments/123",
         expect.objectContaining({ method: "DELETE" })
       );
     });
@@ -188,7 +188,7 @@ describe("ArcaneClient", () => {
       await client.stacks.list("env123", { search: "myapp" });
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3552/api/environments/env123/projects?search=myapp",
+        "http://placeholder/api/environments/env123/projects?search=myapp",
         expect.objectContaining({ method: "GET" })
       );
     });
@@ -202,7 +202,7 @@ describe("ArcaneClient", () => {
       await client.stacks.get("env123", "stack1");
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3552/api/environments/env123/projects/stack1",
+        "http://placeholder/api/environments/env123/projects/stack1",
         expect.objectContaining({ method: "GET" })
       );
     });
@@ -217,7 +217,7 @@ describe("ArcaneClient", () => {
       await client.stacks.deploy("env123", dto);
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3552/api/environments/env123/projects",
+        "http://placeholder/api/environments/env123/projects",
         expect.objectContaining({
           method: "POST",
           body: JSON.stringify(dto),
@@ -235,7 +235,7 @@ describe("ArcaneClient", () => {
       await client.stacks.update("env123", "stack1", dto);
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3552/api/environments/env123/projects/stack1",
+        "http://placeholder/api/environments/env123/projects/stack1",
         expect.objectContaining({
           method: "PUT",
           body: JSON.stringify(dto),
@@ -252,24 +252,13 @@ describe("ArcaneClient", () => {
       await client.stacks.delete("env123", "stack1");
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3552/api/environments/env123/projects/stack1/destroy",
+        "http://placeholder/api/environments/env123/projects/stack1/destroy",
         expect.objectContaining({ method: "DELETE" })
       );
     });
 
-    it(".start(envId, stackId) - POST /environments/{envId}/projects/{stackId}/up", async () => {
-      mockFetch.mockResolvedValue({
-        ok: true,
-        json: async () => ({ success: true, message: "Started" }),
-      } as Response);
-
-      await client.stacks.start("env123", "stack1");
-
-      expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3552/api/environments/env123/projects/stack1/up",
-        expect.objectContaining({ method: "POST" })
-      );
-    });
+    // NOTE: .start() (POST /up) streams NDJSON, not a single JSON object.
+    // It is covered by the dedicated "NDJSON compose streams" describe block below.
 
     it(".stop(envId, stackId) - POST /environments/{envId}/projects/{stackId}/down", async () => {
       mockFetch.mockResolvedValue({
@@ -280,7 +269,7 @@ describe("ArcaneClient", () => {
       await client.stacks.stop("env123", "stack1");
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3552/api/environments/env123/projects/stack1/down",
+        "http://placeholder/api/environments/env123/projects/stack1/down",
         expect.objectContaining({ method: "POST" })
       );
     });
@@ -294,23 +283,375 @@ describe("ArcaneClient", () => {
       await client.stacks.restart("env123", "stack1");
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3552/api/environments/env123/projects/stack1/restart",
+        "http://placeholder/api/environments/env123/projects/stack1/restart",
         expect.objectContaining({ method: "POST" })
       );
     });
 
-    it(".pull(envId, stackId) - POST /environments/{envId}/projects/{stackId}/pull", async () => {
-      mockFetch.mockResolvedValue({
-        ok: true,
-        json: async () => ({ success: true, message: "Images pulled" }),
-      } as Response);
+    it(".pull(envId, stackId) - POST /pull, parsing the NDJSON body line by line", async () => {
+      const pullStream = [
+        '{"status":"Pulling from library/nginx","id":"latest"}',
+        '{"status":"Downloading","id":"a1b2c3"}',
+        '{"status":"Status: Downloaded newer image for nginx:latest"}',
+      ].join("\n");
+      mockFetch.mockResolvedValue({ ok: true, text: async () => pullStream } as Response);
 
-      await client.stacks.pull("env123", "stack1");
+      const result = await client.stacks.pull("env123", "stack1");
 
+      // The path previously used here, /pull-project-images, is this endpoint's
+      // operationId in the OpenAPI spec, not its path; the spec declares /pull.
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3552/api/environments/env123/projects/stack1/pull-project-images",
+        "http://placeholder/api/environments/env123/projects/stack1/pull",
         expect.objectContaining({ method: "POST" })
       );
+      expect(result.success).toBe(true);
+      expect(result.message).toContain("Downloaded newer image");
+    });
+
+    it(".pull(envId, stackId) - reports failure when the stream contains an error", async () => {
+      const errStream = [
+        '{"status":"Pulling from library/nginx","id":"latest"}',
+        '{"error":"manifest unknown: manifest tagged by \\"nope\\" is not found"}',
+      ].join("\n");
+      mockFetch.mockResolvedValue({ ok: true, text: async () => errStream } as Response);
+
+      const result = await client.stacks.pull("env123", "stack1");
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain("manifest unknown");
+    });
+  });
+
+  describe("pull success criterion (absence of error is success)", () => {
+    // The /pull endpoints stream docker pull progress. Unlike the compose
+    // streams (/up, /redeploy), which end on an explicit {"done":true}, no
+    // terminal success sentinel has been observed on a pull stream: checked
+    // against Arcane v2.7.0, an errorless 2-event pull stream never emits one.
+    // Requiring a `{"status":"complete"}` event therefore reports every
+    // successful pull as a failure.
+    const realisticNoSentinelStream = [
+      '{"status":"Pulling from library/nginx","id":"latest"}',
+      '{"status":"Image is up to date for nginx:latest"}',
+    ].join("\n");
+
+    const errorStream = [
+      '{"status":"starting project image pull"}',
+      '{"error":"manifest for ghcr.io/foo/bar:latest not found"}',
+    ].join("\n");
+
+    const singleObjectFallback = '{"success":true,"message":"Images pulled"}';
+
+    const statusLineStream = [
+      '{"status":"Pulling fs layer","id":"a1b2c3"}',
+      '{"status":"Downloading","id":"a1b2c3"}',
+      '{"status":"Status: Downloaded newer image for myapp/web:latest"}',
+    ].join("\n");
+
+    // The spec declares /pull's 200 response with no `content`, so the stream
+    // shape isn't specified anywhere. Arcane may report a failed layer via
+    // `errorDetail` (an object, typically `{"message":"..."}`) instead of the
+    // plain `error` string. Only checking `e.error` lets this fall through to
+    // the "no errors observed" branch and report success:true on a broken pull.
+    const errorDetailOnlyStream = [
+      '{"status":"Pulling from foo/bar"}',
+      '{"errorDetail":{"message":"manifest for ghcr.io/foo/bar:latest not found"}}',
+    ].join("\n");
+
+    // Same event carries both forms with identical text: the extracted error
+    // message must not be duplicated.
+    const bothErrorFormsSameTextStream = [
+      '{"error":"pull access denied","errorDetail":{"message":"pull access denied"}}',
+    ].join("\n");
+
+    const emptyStream = "";
+
+    // Realistic docker-pull progress: two layers pulled with repeated identical
+    // progress ticks ("Downloading"/"Extracting" repeated per layer while the
+    // byte counters that aren't captured here change), ending on a burst of
+    // identical "Extracting" ticks for the slower layer.
+    const repetitiveMultiLayerStream = [
+      '{"status":"Pulling fs layer","id":"a1"}',
+      '{"status":"Pulling fs layer","id":"b2"}',
+      '{"status":"Downloading","id":"a1"}',
+      '{"status":"Downloading","id":"b2"}',
+      '{"status":"Downloading","id":"a1"}',
+      '{"status":"Downloading","id":"b2"}',
+      '{"status":"Downloading","id":"a1"}',
+      '{"status":"Verifying Checksum","id":"a1"}',
+      '{"status":"Download complete","id":"a1"}',
+      '{"status":"Downloading","id":"b2"}',
+      '{"status":"Verifying Checksum","id":"b2"}',
+      '{"status":"Download complete","id":"b2"}',
+      '{"status":"Extracting","id":"a1"}',
+      '{"status":"Extracting","id":"b2"}',
+      '{"status":"Extracting","id":"b2"}',
+      '{"status":"Extracting","id":"b2"}',
+      '{"status":"Extracting","id":"b2"}',
+      '{"status":"Extracting","id":"b2"}',
+    ].join("\n");
+
+    describe("stacks.pull", () => {
+      it("a stream with no errors and no complete sentinel reports success:true", async () => {
+        mockFetch.mockResolvedValue({ ok: true, text: async () => realisticNoSentinelStream } as Response);
+
+        const result = await client.stacks.pull("env123", "stack1");
+
+        expect(result.success).toBe(true);
+      });
+
+      it("a stream with an error event reports success:false with the error text", async () => {
+        mockFetch.mockResolvedValue({ ok: true, text: async () => errorStream } as Response);
+
+        const result = await client.stacks.pull("env123", "stack1");
+
+        expect(result.success).toBe(false);
+        expect(result.message).toContain("manifest for ghcr.io/foo/bar:latest not found");
+      });
+
+      it("single-object ActionResponse fallback is returned unchanged", async () => {
+        mockFetch.mockResolvedValue({ ok: true, text: async () => singleObjectFallback } as Response);
+
+        const result = await client.stacks.pull("env123", "stack1");
+
+        expect(result).toEqual({ success: true, message: "Images pulled" });
+      });
+
+      it("a normal pull stream produces a message with real event info, not just a count", async () => {
+        mockFetch.mockResolvedValue({ ok: true, text: async () => statusLineStream } as Response);
+
+        const result = await client.stacks.pull("env123", "stack1");
+
+        expect(result.success).toBe(true);
+        expect(result.message).not.toMatch(/^Pull finished \(\d+ events\)$/);
+        expect(result.message).toContain("Downloaded newer image for myapp/web:latest");
+      });
+
+      it("an error reported only via errorDetail (no plain `error` field) reports success:false", async () => {
+        mockFetch.mockResolvedValue({ ok: true, text: async () => errorDetailOnlyStream } as Response);
+
+        const result = await client.stacks.pull("env123", "stack1");
+
+        expect(result.success).toBe(false);
+        expect(result.message).toContain("manifest for ghcr.io/foo/bar:latest not found");
+      });
+
+      it("an event carrying both `error` and `errorDetail` with identical text does not duplicate it", async () => {
+        mockFetch.mockResolvedValue({ ok: true, text: async () => bothErrorFormsSameTextStream } as Response);
+
+        const result = await client.stacks.pull("env123", "stack1");
+
+        expect(result.success).toBe(false);
+        expect(result.message).toBe("Pull failed: pull access denied");
+      });
+
+      it("an empty stream (0 events) cannot confirm success, so it reports success:false", async () => {
+        mockFetch.mockResolvedValue({ ok: true, text: async () => emptyStream } as Response);
+
+        const result = await client.stacks.pull("env123", "stack1");
+
+        expect(result.success).toBe(false);
+        expect(result.message).toBe("Pull returned no events; cannot confirm success");
+      });
+
+      it("repeated identical status lines across layers are collapsed, not echoed 5x", async () => {
+        mockFetch.mockResolvedValue({ ok: true, text: async () => repetitiveMultiLayerStream } as Response);
+
+        const result = await client.stacks.pull("env123", "stack1");
+
+        expect(result.success).toBe(true);
+        expect(result.message).toBe(
+          "b2: Downloading | b2: Verifying Checksum | b2: Download complete | a1: Extracting | b2: Extracting"
+        );
+      });
+    });
+
+    describe("projectAdditional.pullImages", () => {
+      it("a stream with no errors and no complete sentinel reports success:true", async () => {
+        mockFetch.mockResolvedValue({ ok: true, text: async () => realisticNoSentinelStream } as Response);
+
+        const result = await client.projectAdditional.pullImages("env123", "proj1");
+
+        expect(result.success).toBe(true);
+      });
+
+      it("a stream with an error event reports success:false with the error text", async () => {
+        mockFetch.mockResolvedValue({ ok: true, text: async () => errorStream } as Response);
+
+        const result = await client.projectAdditional.pullImages("env123", "proj1");
+
+        expect(result.success).toBe(false);
+        expect(result.message).toContain("manifest for ghcr.io/foo/bar:latest not found");
+      });
+
+      it("single-object ActionResponse fallback is returned unchanged", async () => {
+        mockFetch.mockResolvedValue({ ok: true, text: async () => singleObjectFallback } as Response);
+
+        const result = await client.projectAdditional.pullImages("env123", "proj1");
+
+        expect(result).toEqual({ success: true, message: "Images pulled" });
+      });
+
+      it("a normal pull stream produces a message with real event info, not just a count", async () => {
+        mockFetch.mockResolvedValue({ ok: true, text: async () => statusLineStream } as Response);
+
+        const result = await client.projectAdditional.pullImages("env123", "proj1");
+
+        expect(result.success).toBe(true);
+        expect(result.message).not.toMatch(/^Pull finished \(\d+ events\)$/);
+        expect(result.message).toContain("Downloaded newer image for myapp/web:latest");
+      });
+
+      it("an error reported only via errorDetail (no plain `error` field) reports success:false", async () => {
+        mockFetch.mockResolvedValue({ ok: true, text: async () => errorDetailOnlyStream } as Response);
+
+        const result = await client.projectAdditional.pullImages("env123", "proj1");
+
+        expect(result.success).toBe(false);
+        expect(result.message).toContain("manifest for ghcr.io/foo/bar:latest not found");
+      });
+
+      it("an event carrying both `error` and `errorDetail` with identical text does not duplicate it", async () => {
+        mockFetch.mockResolvedValue({ ok: true, text: async () => bothErrorFormsSameTextStream } as Response);
+
+        const result = await client.projectAdditional.pullImages("env123", "proj1");
+
+        expect(result.success).toBe(false);
+        expect(result.message).toBe("Pull failed: pull access denied");
+      });
+
+      it("an empty stream (0 events) cannot confirm success, so it reports success:false", async () => {
+        mockFetch.mockResolvedValue({ ok: true, text: async () => emptyStream } as Response);
+
+        const result = await client.projectAdditional.pullImages("env123", "proj1");
+
+        expect(result.success).toBe(false);
+        expect(result.message).toBe("Pull returned no events; cannot confirm success");
+      });
+
+      it("repeated identical status lines across layers are collapsed, not echoed 5x", async () => {
+        mockFetch.mockResolvedValue({ ok: true, text: async () => repetitiveMultiLayerStream } as Response);
+
+        const result = await client.projectAdditional.pullImages("env123", "proj1");
+
+        expect(result.success).toBe(true);
+        expect(result.message).toBe(
+          "b2: Downloading | b2: Verifying Checksum | b2: Download complete | a1: Extracting | b2: Extracting"
+        );
+      });
+    });
+  });
+
+  describe("NDJSON compose streams (/up and /redeploy)", () => {
+    // /up (stacks.start) and /redeploy stream `application/x-json-stream` (NDJSON),
+    // NOT a single JSON object. Parsing the whole body with response.json() throws
+    // "Unexpected non-whitespace character after JSON..." on the 2nd line.
+    // Event shape observed against Arcane v2.7.0:
+    //   {type,activityId}, {log}, {done:true}, {error}
+    const upStream = [
+      '{"type":"activity","activityId":"195296d1-f692-401e-b56f-0d6421c8bb9d"}',
+      '{"log":" Container web Recreate "}',
+      '{"log":" Container web Recreated "}',
+      '{"log":" Container web Starting "}',
+      '{"log":" Container web Started "}',
+      '{"log":" Container web Waiting "}',
+      '{"log":" Container web Healthy "}',
+      '{"done":true}',
+    ].join("\n");
+
+    it("start() does NOT throw on a multi-line NDJSON /up body (regression for the JSON.parse crash)", async () => {
+      mockFetch.mockResolvedValue({ ok: true, text: async () => upStream } as Response);
+      await expect(client.stacks.start("env123", "stack1")).resolves.toBeDefined();
+    });
+
+    it("start() - POST /up parses the NDJSON and returns an aggregated success", async () => {
+      mockFetch.mockResolvedValue({ ok: true, text: async () => upStream } as Response);
+
+      const result = await client.stacks.start("env123", "stack1");
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://placeholder/api/environments/env123/projects/stack1/up",
+        expect.objectContaining({ method: "POST" })
+      );
+      expect(result.success).toBe(true);
+      expect(result.message).toContain("Healthy");
+    });
+
+    it("start() reports failure when the /up stream contains an error event", async () => {
+      const errStream = [
+        '{"type":"activity","activityId":"x"}',
+        '{"log":" Container web Building "}',
+        '{"error":"failed to build: exit code 1"}',
+      ].join("\n");
+      mockFetch.mockResolvedValue({ ok: true, text: async () => errStream } as Response);
+
+      const result = await client.stacks.start("env123", "stack1");
+      expect(result.success).toBe(false);
+      expect(result.message).toContain("failed to build");
+    });
+
+    it("redeploy() - POST /redeploy parses the NDJSON and returns success", async () => {
+      const redeployStream = [
+        '{"type":"activity","activityId":"9ae9f9d2-2503-4d22-9b0b-fcade4d3e155"}',
+        '{"log":" Container web Running "}',
+        '{"log":" Container web Healthy "}',
+        '{"done":true}',
+      ].join("\n");
+      mockFetch.mockResolvedValue({ ok: true, text: async () => redeployStream } as Response);
+
+      const result = await client.projectAdditional.redeploy("env123", "proj1");
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://placeholder/api/environments/env123/projects/proj1/redeploy",
+        expect.objectContaining({ method: "POST" })
+      );
+      expect(result.success).toBe(true);
+      expect(result.message).toContain("Healthy");
+    });
+
+    it("redeploy() reports failure when the /redeploy stream contains an error event", async () => {
+      const errStream = [
+        '{"type":"activity","activityId":"x"}',
+        '{"error":"no such image: ghcr.io/foo/bar:latest"}',
+      ].join("\n");
+      mockFetch.mockResolvedValue({ ok: true, text: async () => errStream } as Response);
+
+      const result = await client.projectAdditional.redeploy("env123", "proj1");
+      expect(result.success).toBe(false);
+      expect(result.message).toContain("no such image");
+    });
+
+    it("pullImages() - POST /pull parses the NDJSON progress stream", async () => {
+      const pullStream = [
+        '{"status":"starting project image pull"}',
+        '{"status":"Status: Image is up to date for nginx:latest"}',
+        '{"status":"complete"}',
+      ].join("\n");
+      mockFetch.mockResolvedValue({ ok: true, text: async () => pullStream } as Response);
+
+      const result = await client.projectAdditional.pullImages("env123", "proj1");
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://placeholder/api/environments/env123/projects/proj1/pull",
+        expect.objectContaining({ method: "POST" })
+      );
+      expect(result.success).toBe(true);
+      expect(result.message).toContain("up to date");
+    });
+
+    it("start() falls back to a single ActionResponse object if the endpoint does not stream", async () => {
+      // Defensive: the OpenAPI spec declares the 200 of /up, /redeploy and /pull
+      // with no `content` at all (unlike /down and /restart, which do declare
+      // application/json and are therefore left alone by this change), so the
+      // body shape is unspecified and some versions may still answer with a
+      // single {success,message} object rather than a stream.
+      mockFetch.mockResolvedValue({
+        ok: true,
+        text: async () => '{"success":true,"message":"Project started"}',
+      } as Response);
+
+      const result = await client.stacks.start("env123", "stack1");
+      expect(result.success).toBe(true);
+      expect(result.message).toContain("Project started");
     });
   });
 
@@ -324,7 +665,7 @@ describe("ArcaneClient", () => {
       await client.containers.list("env123");
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3552/api/environments/env123/containers",
+        "http://placeholder/api/environments/env123/containers",
         expect.objectContaining({ method: "GET" })
       );
     });
@@ -338,7 +679,7 @@ describe("ArcaneClient", () => {
       await client.containers.get("env123", "cont1");
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3552/api/environments/env123/containers/cont1",
+        "http://placeholder/api/environments/env123/containers/cont1",
         expect.objectContaining({ method: "GET" })
       );
     });
@@ -352,7 +693,7 @@ describe("ArcaneClient", () => {
       await client.containers.start("env123", "cont1");
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3552/api/environments/env123/containers/cont1/start",
+        "http://placeholder/api/environments/env123/containers/cont1/start",
         expect.objectContaining({ method: "POST" })
       );
     });
@@ -366,7 +707,7 @@ describe("ArcaneClient", () => {
       await client.containers.stop("env123", "cont1");
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3552/api/environments/env123/containers/cont1/stop",
+        "http://placeholder/api/environments/env123/containers/cont1/stop",
         expect.objectContaining({ method: "POST" })
       );
     });
@@ -380,7 +721,7 @@ describe("ArcaneClient", () => {
       await client.containers.restart("env123", "cont1");
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3552/api/environments/env123/containers/cont1/restart",
+        "http://placeholder/api/environments/env123/containers/cont1/restart",
         expect.objectContaining({ method: "POST" })
       );
     });
@@ -394,7 +735,7 @@ describe("ArcaneClient", () => {
       await client.containers.kill("env123", "cont1");
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3552/api/environments/env123/containers/cont1/update",
+        "http://placeholder/api/environments/env123/containers/cont1/update",
         expect.objectContaining({
           method: "POST",
           body: JSON.stringify({ action: "kill" }),
@@ -413,7 +754,7 @@ describe("ArcaneClient", () => {
       await client.images.list("env123");
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3552/api/environments/env123/images",
+        "http://placeholder/api/environments/env123/images",
         expect.objectContaining({ method: "GET" })
       );
     });
@@ -428,7 +769,7 @@ describe("ArcaneClient", () => {
       await client.images.pull("env123", dto);
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3552/api/environments/env123/images/pull",
+        "http://placeholder/api/environments/env123/images/pull",
         expect.objectContaining({
           method: "POST",
           body: JSON.stringify(dto),
@@ -445,7 +786,7 @@ describe("ArcaneClient", () => {
       await client.images.remove("env123", "img123");
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3552/api/environments/env123/images/img123",
+        "http://placeholder/api/environments/env123/images/img123",
         expect.objectContaining({ method: "DELETE" })
       );
     });
@@ -459,7 +800,7 @@ describe("ArcaneClient", () => {
       await client.images.prune("env123");
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3552/api/environments/env123/images/prune",
+        "http://placeholder/api/environments/env123/images/prune",
         expect.objectContaining({ method: "POST" })
       );
     });
@@ -475,7 +816,7 @@ describe("ArcaneClient", () => {
       await client.volumes.list("env123");
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3552/api/environments/env123/volumes",
+        "http://placeholder/api/environments/env123/volumes",
         expect.objectContaining({ method: "GET" })
       );
     });
@@ -489,7 +830,7 @@ describe("ArcaneClient", () => {
       await client.volumes.inspect("env123", "data-vol");
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3552/api/environments/env123/volumes/data-vol",
+        "http://placeholder/api/environments/env123/volumes/data-vol",
         expect.objectContaining({ method: "GET" })
       );
     });
@@ -503,7 +844,7 @@ describe("ArcaneClient", () => {
       await client.volumes.remove("env123", "data-vol");
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3552/api/environments/env123/volumes/data-vol",
+        "http://placeholder/api/environments/env123/volumes/data-vol",
         expect.objectContaining({ method: "DELETE" })
       );
     });
@@ -517,7 +858,7 @@ describe("ArcaneClient", () => {
       await client.volumes.prune("env123");
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3552/api/environments/env123/volumes/prune",
+        "http://placeholder/api/environments/env123/volumes/prune",
         expect.objectContaining({ method: "POST" })
       );
     });
@@ -533,7 +874,7 @@ describe("ArcaneClient", () => {
       await client.networks.list("env123");
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3552/api/environments/env123/networks",
+        "http://placeholder/api/environments/env123/networks",
         expect.objectContaining({ method: "GET" })
       );
     });
@@ -547,7 +888,7 @@ describe("ArcaneClient", () => {
       await client.networks.inspect("env123", "net1");
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3552/api/environments/env123/networks/net1",
+        "http://placeholder/api/environments/env123/networks/net1",
         expect.objectContaining({ method: "GET" })
       );
     });
@@ -561,7 +902,7 @@ describe("ArcaneClient", () => {
       await client.networks.remove("env123", "net1");
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3552/api/environments/env123/networks/net1",
+        "http://placeholder/api/environments/env123/networks/net1",
         expect.objectContaining({ method: "DELETE" })
       );
     });
@@ -575,7 +916,7 @@ describe("ArcaneClient", () => {
       await client.networks.prune("env123");
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3552/api/environments/env123/networks/prune",
+        "http://placeholder/api/environments/env123/networks/prune",
         expect.objectContaining({ method: "POST" })
       );
     });
@@ -591,7 +932,7 @@ describe("ArcaneClient", () => {
       await client.templates.list({ search: "wordpress" });
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3552/api/templates?search=wordpress",
+        "http://placeholder/api/templates?search=wordpress",
         expect.objectContaining({ method: "GET" })
       );
     });
@@ -605,7 +946,7 @@ describe("ArcaneClient", () => {
       await client.templates.get("tpl1");
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3552/api/templates/tpl1",
+        "http://placeholder/api/templates/tpl1",
         expect.objectContaining({ method: "GET" })
       );
     });
@@ -620,7 +961,7 @@ describe("ArcaneClient", () => {
       await client.templates.create(dto);
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3552/api/templates",
+        "http://placeholder/api/templates",
         expect.objectContaining({
           method: "POST",
           body: JSON.stringify(dto),
@@ -638,7 +979,7 @@ describe("ArcaneClient", () => {
       await client.templates.update("tpl1", dto);
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3552/api/templates/tpl1",
+        "http://placeholder/api/templates/tpl1",
         expect.objectContaining({
           method: "PUT",
           body: JSON.stringify(dto),
@@ -655,14 +996,14 @@ describe("ArcaneClient", () => {
       await client.templates.delete("tpl1");
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3552/api/templates/tpl1",
+        "http://placeholder/api/templates/tpl1",
         expect.objectContaining({ method: "DELETE" })
       );
     });
   });
 
   describe("system", () => {
-    it(".version(current?) - GET /version", async () => {
+    it(".version() - GET /app-version", async () => {
       mockFetch.mockResolvedValue({
         ok: true,
         json: async () => ({ success: true, data: { version: "1.2.3" } }),
@@ -671,7 +1012,7 @@ describe("ArcaneClient", () => {
       await client.system.version();
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3552/api/version",
+        "http://placeholder/api/app-version",
         expect.objectContaining({ method: "GET" })
       );
     });
